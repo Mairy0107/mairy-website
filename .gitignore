@@ -17,4 +17,9 @@ coverage/
 # Built artifacts
 *.jar
 backend/konbini-api.jar
+backend/.env
 
+# 本地 Codex 验证文件
+.tmp-codex-*
+.tmp-run-codex-*
+codex-dotenv-fix.log*

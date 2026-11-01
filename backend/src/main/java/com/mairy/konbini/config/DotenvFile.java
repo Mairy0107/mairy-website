@@ -8,7 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 解析仓库根目录的 .env。只做文本拆分，不执行命令，也不记录变量值。
+ * 定位并解析本地 .env。只做文本拆分，不执行命令，也不记录变量值。
  */
 public final class DotenvFile {
 
@@ -18,19 +18,24 @@ public final class DotenvFile {
     }
 
     /**
-     * 工作目录是仓库根时读取 .env；工作目录是 backend 时读取上一级 .env。
+     * 从工作目录逐级向上查找，优先同目录 .env，其次 backend/.env。
      */
     public static Path locate(Path workingDirectory) {
-        Path cwd = workingDirectory.toAbsolutePath().normalize();
-        Path direct = cwd.resolve(".env");
-        if (Files.isRegularFile(direct)) {
-            return direct;
-        }
-        if (cwd.getFileName() != null && "backend".equals(cwd.getFileName().toString()) && cwd.getParent() != null) {
-            Path parent = cwd.getParent().resolve(".env");
-            if (Files.isRegularFile(parent)) {
-                return parent;
+        Path directory = workingDirectory.toAbsolutePath().normalize();
+        while (directory != null) {
+            Path direct = directory.resolve(".env");
+            if (Files.isRegularFile(direct)) {
+                return direct;
             }
+            Path backend = directory.resolve("backend").resolve(".env");
+            if (Files.isRegularFile(backend)) {
+                return backend;
+            }
+            // 到达仓库边界后停止，避免误读仓库外的同名文件。
+            if (Files.exists(directory.resolve(".git"))) {
+                break;
+            }
+            directory = directory.getParent();
         }
         return null;
     }
