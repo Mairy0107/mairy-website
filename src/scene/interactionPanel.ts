@@ -27,7 +27,8 @@ export function createInteractionPanel(
   panel.setAttribute('aria-label', '场景交互设置');
   panel.tabIndex = 0;
   panel.innerHTML = `
-    <h1>雨夜 · 街角便利店</h1>
+    <!-- 统一面板品牌名称。 -->
+    <h1>Mairy</h1>
     <!-- 优先展示场景开关，避免操作说明挤占首屏入口。 -->
     <button type="button" class="explode-toggle" aria-pressed="false">绽开模型</button>
     <button type="button" class="rain-toggle" aria-pressed="true">雨水：开</button>
