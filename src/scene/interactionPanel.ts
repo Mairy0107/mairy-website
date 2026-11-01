@@ -10,7 +10,7 @@ export interface InteractionPanel {
   dispose: () => void;
 }
 
-/** 创建含雨水开关的场景面板及名称提示，空白区域透传画布事件。 */
+/** 创建优先展示绽开与雨水开关的场景面板及名称提示，空白区域透传画布事件。 */
 export function createInteractionPanel(
   camera: THREE.Camera,
   canvas: HTMLCanvasElement,
@@ -28,9 +28,10 @@ export function createInteractionPanel(
   panel.tabIndex = 0;
   panel.innerHTML = `
     <h1>雨夜 · 街角便利店</h1>
-    <p class="interaction-hint">拖拽旋转 · 滚轮缩放<br>绽开后悬停查看名称，点选物件切换样式</p>
+    <!-- 优先展示场景开关，避免操作说明挤占首屏入口。 -->
     <button type="button" class="explode-toggle" aria-pressed="false">绽开模型</button>
     <button type="button" class="rain-toggle" aria-pressed="true">雨水：开</button>
+    <p class="interaction-hint">拖拽旋转 · 滚轮缩放<br>绽开后悬停查看名称，点选物件切换样式</p>
     <h2>选择物件</h2>
     <div class="object-list" role="group" aria-label="可交互物件"></div>
     <h2 class="style-heading" id="interaction-style-heading">物件样式</h2>
