@@ -6,9 +6,14 @@ export type StyleIndex = 0 | 1 | 2;
 
 export interface InteractionSettings {
   exploded: boolean;
+  /** 雨水偏好；关闭后隐藏雨丝与涟漪。 */
+  rainEnabled: boolean;
   styles: Partial<Record<ObjectKey, StyleIndex>>;
   version: 1;
 }
+
+// 旧接口与旧库允许缺少雨水字段，加载时统一补为开启。
+type InteractionSettingsPayload = Omit<InteractionSettings, 'rainEnabled'> & { rainEnabled?: boolean };
 
 export interface SceneObject {
   objectKey: ObjectKey;
@@ -28,11 +33,12 @@ export function isStyleIndex(value: unknown): value is StyleIndex {
   return value === 0 || value === 1 || value === 2;
 }
 
-/** 校验整体交互设置，允许缺省样式沿用物件目录默认值。 */
-export function isInteractionSettings(value: unknown): value is InteractionSettings {
+/** 校验交互设置，兼容旧数据缺少雨水字段与缺省样式。 */
+export function isInteractionSettings(value: unknown): value is InteractionSettingsPayload {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const data = value as Record<string, unknown>;
   if (data.version !== 1 || typeof data.exploded !== 'boolean') return false;
+  if (data.rainEnabled !== undefined && typeof data.rainEnabled !== 'boolean') return false;
   if (typeof data.styles !== 'object' || data.styles === null || Array.isArray(data.styles)) return false;
   return Object.entries(data.styles).every(([key, style]) => isObjectKey(key) && isStyleIndex(style));
 }

@@ -10,7 +10,7 @@ export interface InteractionPanel {
   dispose: () => void;
 }
 
-/** 创建中文面板及射线名称提示，空白覆盖层不拦截画布事件。 */
+/** 创建含雨水开关的场景面板及名称提示，空白区域透传画布事件。 */
 export function createInteractionPanel(
   camera: THREE.Camera,
   canvas: HTMLCanvasElement,
@@ -30,6 +30,7 @@ export function createInteractionPanel(
     <h1>雨夜 · 街角便利店</h1>
     <p class="interaction-hint">拖拽旋转 · 滚轮缩放<br>绽开后悬停查看名称，点选物件切换样式</p>
     <button type="button" class="explode-toggle" aria-pressed="false">绽开模型</button>
+    <button type="button" class="rain-toggle" aria-pressed="true">雨水：开</button>
     <h2>选择物件</h2>
     <div class="object-list" role="group" aria-label="可交互物件"></div>
     <h2 class="style-heading" id="interaction-style-heading">物件样式</h2>
@@ -48,6 +49,7 @@ export function createInteractionPanel(
   const styles = panel.querySelector<HTMLDivElement>('.style-list')!;
   const heading = panel.querySelector<HTMLHeadingElement>('.style-heading')!;
   const explode = panel.querySelector<HTMLButtonElement>('.explode-toggle')!;
+  const rain = panel.querySelector<HTMLButtonElement>('.rain-toggle')!;
   const save = panel.querySelector<HTMLButtonElement>('.save-interaction')!;
   const status = panel.querySelector<HTMLParagraphElement>('.interaction-status')!;
   const objectButtons = new Map<ObjectKey, HTMLButtonElement>();
@@ -115,7 +117,21 @@ export function createInteractionPanel(
     changed();
   }
 
-  /** 保存点击时的整体快照，超时或错误保留本地调整以便重试。 */
+  /** 同步雨水偏好文案与可访问状态，绽开不改变用户偏好。 */
+  function syncRain(): void {
+    rain.textContent = settings.interaction.rainEnabled ? '雨水：开' : '雨水：关';
+    rain.setAttribute('aria-pressed', String(settings.interaction.rainEnabled));
+  }
+
+  /** 切换实际雨效，并复用整体设置的待保存提示。 */
+  function toggleRain(): void {
+    beforeChange();
+    model.setRainEnabled(!settings.interaction.rainEnabled);
+    syncRain();
+    changed();
+  }
+
+  /** 保存含雨水偏好的整体快照，超时或错误保留本地调整以便重试。 */
   async function persist(): Promise<void> {
     if (saving) return;
     saving = new AbortController();
@@ -228,6 +244,7 @@ export function createInteractionPanel(
   }
 
   explode.addEventListener('click', toggleExploded, events);
+  rain.addEventListener('click', toggleRain, events);
   save.addEventListener('click', () => { void persist(); }, events);
   canvas.addEventListener('pointermove', move, events);
   canvas.addEventListener('pointerdown', pointerDown, events);
@@ -238,6 +255,7 @@ export function createInteractionPanel(
   panel.addEventListener('pointerenter', leave, events);
   select(selected);
   syncExploded();
+  syncRain();
   return {
     update,
     /** 卸载所有面板事件、未完成保存请求与提示节点。 */

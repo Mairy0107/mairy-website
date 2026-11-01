@@ -86,6 +86,7 @@ class ApiContractTest {
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("secret"))));
     }
 
+    /** 验证雨水关闭与原有设置一起持久化。 */
     @Test
     void settingsRoundTripPreservesJsonValues() throws Exception {
         SceneSettingEntity camera = new SceneSettingEntity();
@@ -106,16 +107,62 @@ class ApiContractTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("设置不存在"));
 
-        String body = "{\"exploded\":true,\"styles\":{\"store\":1},\"version\":1}";
+        String body = "{\"exploded\":true,\"rainEnabled\":false,\"styles\":{\"store\":1},\"version\":1}";
         mockMvc.perform(put("/api/settings/interaction")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.exploded").value(true))
-                .andExpect(jsonPath("$.styles.store").value(1));
+                .andExpect(jsonPath("$.styles.store").value(1))
+                .andExpect(jsonPath("$.rainEnabled").value(false));
         ArgumentCaptor<String> stored = ArgumentCaptor.forClass(String.class);
         verify(settingMapper).upsert(eq("interaction"), stored.capture());
         org.junit.jupiter.api.Assertions.assertEquals(objectMapper.readTree(body), objectMapper.readTree(stored.getValue()));
+    }
+
+    /** 验证旧库读取及旧客户端保存均补齐默认开启，关闭偏好可刷新读取。 */
+    @Test
+    void defaultsLegacyRainPreferenceAndReadsSavedPreference() throws Exception {
+        SceneSettingEntity interaction = new SceneSettingEntity();
+        interaction.setSettingKey("interaction");
+        String legacy = "{\"exploded\":false,\"styles\":{},\"version\":1}";
+        interaction.setSettingValue(legacy);
+        when(settingMapper.findAll()).thenReturn(List.of(interaction));
+        when(settingMapper.findByKey("interaction")).thenReturn(interaction);
+
+        mockMvc.perform(get("/api/settings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.interaction.rainEnabled").value(true));
+        mockMvc.perform(get("/api/settings/interaction"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rainEnabled").value(true));
+        mockMvc.perform(put("/api/settings/interaction")
+                        .contentType(MediaType.APPLICATION_JSON).content(legacy))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rainEnabled").value(true));
+        ArgumentCaptor<String> stored = ArgumentCaptor.forClass(String.class);
+        verify(settingMapper).upsert(eq("interaction"), stored.capture());
+        org.junit.jupiter.api.Assertions.assertTrue(objectMapper.readTree(stored.getValue()).get("rainEnabled").booleanValue());
+
+        interaction.setSettingValue("{\"exploded\":false,\"rainEnabled\":false,\"styles\":{},\"version\":1}");
+        mockMvc.perform(get("/api/settings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.interaction.rainEnabled").value(false));
+        mockMvc.perform(get("/api/settings/interaction"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rainEnabled").value(false));
+    }
+
+    /** 无效雨水字段必须在写入数据库之前被拒绝。 */
+    @Test
+    void rejectsInvalidRainPreference() throws Exception {
+        for (String value : List.of("null", "0", "\"false\"")) {
+            mockMvc.perform(put("/api/settings/interaction")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"exploded\":false,\"styles\":{},\"version\":1,\"rainEnabled\":" + value + "}"))
+                    .andExpect(status().isBadRequest());
+        }
+        verify(settingMapper, never()).upsert(anyString(), anyString());
     }
 
     @Test
@@ -124,7 +171,7 @@ class ApiContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"exploded\":false,\"styles\":{\"store\":3},\"version\":1}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("交互设置格式无效，请使用 version: 1、exploded 布尔值及 0/1/2 样式"));
+                .andExpect(jsonPath("$.error").value("交互设置格式无效，请使用 version: 1、exploded 布尔值、可选 rainEnabled 布尔值及 0/1/2 样式"));
         verify(settingMapper, never()).upsert(anyString(), anyString());
 
         mockMvc.perform(put("/api/settings/camera").content("{\"position\":[1,2,3]}"))

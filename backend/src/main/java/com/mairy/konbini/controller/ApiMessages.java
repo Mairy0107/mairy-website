@@ -12,7 +12,7 @@ public final class ApiMessages {
     public static final String TOO_LARGE = "请求体过大";
     public static final String NO_ROUTE = "接口不存在";
     public static final String UNAVAILABLE = "服务暂时不可用";
-    public static final String BAD_INTERACTION = "交互设置格式无效，请使用 version: 1、exploded 布尔值及 0/1/2 样式";
+    public static final String BAD_INTERACTION = "交互设置格式无效，请使用 version: 1、exploded 布尔值、可选 rainEnabled 布尔值及 0/1/2 样式";
 
     private ApiMessages() {
     }

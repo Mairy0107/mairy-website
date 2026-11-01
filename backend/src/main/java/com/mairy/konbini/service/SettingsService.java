@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mairy.konbini.entity.SceneSettingEntity;
 import com.mairy.konbini.exception.InvalidInteractionException;
 import com.mairy.konbini.exception.StoredJsonException;
@@ -30,37 +31,50 @@ public class SettingsService {
     }
 
     /**
-     * 返回全部设置。同一个键出现多行时保留后读到的值。
+     * 返回全部设置，为旧交互数据补齐雨水偏好；同键保留后读到的值。
      */
     public Map<String, JsonNode> getAll() {
         Map<String, JsonNode> settings = new LinkedHashMap<>();
         for (SceneSettingEntity row : sceneSettingMapper.findAll()) {
             if (row.getSettingKey() != null) {
-                settings.put(row.getSettingKey(), read(row.getSettingValue()));
+                settings.put(row.getSettingKey(), withInteractionDefaults(row.getSettingKey(), read(row.getSettingValue())));
             }
         }
         return settings;
     }
 
     /**
-     * 读取一个键。空 Optional 表示行不存在，JSON null 仍会放在 Optional 里。
+     * 读取一个键并兼容旧雨水设置；空 Optional 表示行不存在，JSON null 仍会返回。
      */
     public Optional<JsonNode> getByKey(String key) {
         SceneSettingEntity row = sceneSettingMapper.findByKey(key);
         if (row == null) {
             return Optional.empty();
         }
-        return Optional.of(read(row.getSettingValue()));
+        return Optional.of(withInteractionDefaults(key, read(row.getSettingValue())));
     }
 
     /**
-     * 保存请求体中的 JSON 值并原样返回。interaction 会先按约定校验。
+     * 校验并保存 JSON 设置，旧客户端缺少雨水偏好时补为开启后返回。
      */
     public JsonNode save(String key, JsonNode value) {
         if ("interaction".equals(key) && !InteractionValidator.isInteractionSettings(value)) {
             throw new InvalidInteractionException();
         }
-        sceneSettingMapper.upsert(key, write(value));
+        JsonNode normalized = withInteractionDefaults(key, value);
+        sceneSettingMapper.upsert(key, write(normalized));
+        return normalized;
+    }
+
+    /**
+     * 仅为缺字段的交互 JSON 补充默认雨水偏好，不改写请求体或其他设置。
+     */
+    private JsonNode withInteractionDefaults(String key, JsonNode value) {
+        if ("interaction".equals(key) && value instanceof ObjectNode object && !object.has("rainEnabled")) {
+            ObjectNode normalized = object.deepCopy();
+            normalized.put("rainEnabled", true);
+            return normalized;
+        }
         return value;
     }
 

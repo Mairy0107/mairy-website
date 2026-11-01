@@ -10,6 +10,8 @@ export interface ObjectInteraction {
   pickTargets: THREE.Mesh[];
   setStyle: (key: ObjectKey, style: StyleIndex) => void;
   setExploded: (exploded: boolean) => void;
+  /** 设置雨水偏好，并与绽开状态共同决定雨效可见性。 */
+  setRainEnabled: (enabled: boolean) => void;
   update: (delta: number) => boolean;
   dispose: () => void;
 }
@@ -64,7 +66,7 @@ const STYLES: Record<ObjectKey, readonly [{ color: string; glow: string }, { col
   ac: [{ color: '#dfd2b6', glow: '#fff0cc' }, { color: '#3e7373', glow: '#91d6d6' }],
 };
 
-/** 为十类物件隔离材质及绽开父组，不改动底座、天气、路面或共享材质。 */
+/** 隔离物件材质及绽开父组，并统一协调雨水偏好与绽开状态。 */
 export function createObjectInteraction(scene: THREE.Scene, settings: SceneSettings, weather?: { setVisible: (visible: boolean) => void }): ObjectInteraction {
   const objects = new Map<ObjectKey, THREE.Group>();
   scene.traverse((object) => {
@@ -170,14 +172,25 @@ export function createObjectInteraction(scene: THREE.Scene, settings: SceneSetti
     settings.interaction.styles[key] = style;
   }
 
-  /** 切换绽开目标；绽开时关闭雨效，还原后恢复。 */
+  /** 根据雨水偏好与绽开状态同步雨丝、涟漪可见性。 */
+  function syncWeather(): void {
+    weather?.setVisible(settings.interaction.rainEnabled && !settings.interaction.exploded);
+  }
+
+  /** 更新雨水偏好，绽开期间仍隐藏雨效。 */
+  function setRainEnabled(enabled: boolean): void {
+    settings.interaction.rainEnabled = enabled;
+    syncWeather();
+  }
+
+  /** 切换绽开目标；还原后按用户雨水偏好恢复雨效。 */
   function setExploded(exploded: boolean): void {
     settings.interaction.exploded = exploded;
     target = exploded ? 1 : 0;
-    weather?.setVisible(!exploded);
+    syncWeather();
   }
-  // 启动时若已是绽开状态，同步隐藏雨。
-  weather?.setVisible(!settings.interaction.exploded);
+  // 启动时同步已保存的雨水偏好与绽开状态。
+  syncWeather();
 
   /** 分阶段推进分解图：先整体拉开，再按 delay 错峰到位，形成技术爆炸图间隙。 */
   function update(delta: number): boolean {
@@ -211,7 +224,7 @@ export function createObjectInteraction(scene: THREE.Scene, settings: SceneSetti
     if (materials.some((material) => !material.transparent)) pickTargets.push(object);
   });
   return {
-    objects, pickTargets, setStyle, setExploded, update,
+    objects, pickTargets, setStyle, setExploded, setRainEnabled, update,
     /** 恢复原材质后释放交互副本，原资源仍由场景统一清理。 */
     dispose(): void {
       restore.forEach((reset) => reset());

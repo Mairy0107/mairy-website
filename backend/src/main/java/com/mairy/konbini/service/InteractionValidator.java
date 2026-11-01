@@ -22,7 +22,7 @@ public final class InteractionValidator {
     }
 
     /**
-     * 判断整体交互设置：版本必须为 1，exploded 为布尔，样式只能是已知物件的 0、1 或 2。
+     * 校验交互设置：雨水偏好允许缺省，否则必须为布尔；样式仅限已知物件的 0、1 或 2。
      */
     public static boolean isInteractionSettings(JsonNode value) {
         if (value == null || !value.isObject()) {
@@ -32,6 +32,10 @@ public final class InteractionValidator {
         JsonNode exploded = value.get("exploded");
         JsonNode styles = value.get("styles");
         if (!isExactNumber(version, 1) || exploded == null || !exploded.isBoolean()) {
+            return false;
+        }
+        JsonNode rainEnabled = value.get("rainEnabled");
+        if (rainEnabled != null && !rainEnabled.isBoolean()) {
             return false;
         }
         if (!(styles instanceof ObjectNode stylesObject)) {

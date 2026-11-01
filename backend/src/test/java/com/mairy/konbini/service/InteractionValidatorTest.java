@@ -33,6 +33,22 @@ class InteractionValidatorTest {
         assertFalse(InteractionValidator.isInteractionSettings(objectMapper.readTree("[]")));
     }
 
+    /** 校验雨水布尔偏好，并允许旧客户端省略字段。 */
+    @Test
+    void checksRainPreferenceAndAcceptsLegacySettings() throws Exception {
+        String legacy = "{\"exploded\":false,\"styles\":{},\"version\":1}";
+        assertTrue(InteractionValidator.isInteractionSettings(objectMapper.readTree(legacy)));
+        for (String value : List.of("true", "false", "null", "0", "\"false\"")) {
+            String body = legacy.substring(0, legacy.length() - 1) + ",\"rainEnabled\":" + value + "}";
+            boolean valid = InteractionValidator.isInteractionSettings(objectMapper.readTree(body));
+            if ("true".equals(value) || "false".equals(value)) {
+                assertTrue(valid);
+            } else {
+                assertFalse(valid);
+            }
+        }
+    }
+
     @Test
     void checksCatalogShape() {
         assertTrue(InteractionValidator.isSceneObject(
