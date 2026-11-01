@@ -1,8 +1,8 @@
-package com.mairy.konbini.repository;
+package com.mairy.konbini.mapper;
 
 import java.util.List;
 
-import com.mairy.konbini.entity.SceneSettingEntity;
+import com.mairy.konbini.entity.SceneSetting;
 
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -25,7 +25,7 @@ public interface SceneSettingMapper {
             @Result(column = "setting_value", property = "settingValue", typeHandler = JsonColumnTypeHandler.class)
     })
     @Select("SELECT setting_key, setting_value FROM scene_settings")
-    List<SceneSettingEntity> findAll();
+    List<SceneSetting> findAll();
 
     /**
      * 按主键读取一条设置。没有行时返回 null，用来和 JSON null 区分。
@@ -35,7 +35,7 @@ public interface SceneSettingMapper {
             @Result(column = "setting_value", property = "settingValue", typeHandler = JsonColumnTypeHandler.class)
     })
     @Select("SELECT setting_key, setting_value FROM scene_settings WHERE setting_key = #{key}")
-    SceneSettingEntity findByKey(@Param("key") String key);
+    SceneSetting findByKey(@Param("key") String key);
 
     /**
      * 新增或覆盖一个 JSON 值，同时更新修改时间。

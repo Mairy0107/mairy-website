@@ -3,7 +3,7 @@ package com.mairy.konbini.entity;
 /**
  * scene_settings 的一行。settingValue 是库中的 JSON 文本。
  */
-public class SceneSettingEntity {
+public class SceneSetting {
 
     private String settingKey;
     private String settingValue;

@@ -136,7 +136,7 @@ curl.exe http://127.0.0.1:3001/api/settings
 ├── vite.config.ts             # 相对资源路径与引擎分包
 ├── .env.example               # 不含真实凭据的配置模板
 ├── db/migration/              # 只补充中文注释的 SQL，不删除数据
-├── backend/                   # Spring Boot API，分层为 controller / service / repository / entity / dto / config
+├── backend/                   # Spring Boot API，分层为 controller / service / mapper / entity / dto / config
 │   ├── pom.xml
 │   ├── Dockerfile             # 替换 site-api，监听 3001
 │   └── src/main/java/com/mairy/konbini/

@@ -1,8 +1,8 @@
-package com.mairy.konbini.repository;
+package com.mairy.konbini.mapper;
 
 import java.util.List;
 
-import com.mairy.konbini.entity.SceneObjectEntity;
+import com.mairy.konbini.entity.SceneObject;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Result;
@@ -30,5 +30,5 @@ public interface SceneObjectMapper {
             FROM scene_objects
             ORDER BY sort_order, object_key
             """)
-    List<SceneObjectEntity> findAll();
+    List<SceneObject> findAll();
 }

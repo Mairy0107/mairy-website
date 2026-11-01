@@ -3,7 +3,7 @@ package com.mairy.konbini.entity;
 /**
  * scene_objects 的一行。styleLabels 仍是 JSON 数组文本。
  */
-public class SceneObjectEntity {
+public class SceneObject {
 
     private String objectKey;
     private String displayName;

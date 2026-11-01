@@ -1,73 +1,16 @@
 package com.mairy.konbini.service;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mairy.konbini.dto.SceneObjectResponse;
-import com.mairy.konbini.entity.SceneObjectEntity;
-import com.mairy.konbini.exception.InvalidCatalogException;
-import com.mairy.konbini.exception.StoredJsonException;
-import com.mairy.konbini.repository.SceneObjectMapper;
-
-import org.springframework.stereotype.Service;
 
 /**
- * 把物件目录转换成前端使用的驼峰字段，并拒绝不完整的样式数据。
+ * 场景物件目录接口，提供经过校验的展示数据。
  */
-@Service
-public class SceneObjectService {
-
-    private final SceneObjectMapper sceneObjectMapper;
-    private final ObjectMapper objectMapper;
-
-    public SceneObjectService(SceneObjectMapper sceneObjectMapper, ObjectMapper objectMapper) {
-        this.sceneObjectMapper = sceneObjectMapper;
-        this.objectMapper = objectMapper;
-    }
+public interface SceneObjectService {
 
     /**
-     * 按数据库排序返回目录。任一字段不合法时整次请求失败，避免面板拿到半份数据。
+     * 按数据库排序返回目录，拒绝不完整的物件数据。
      */
-    public List<SceneObjectResponse> list() {
-        List<SceneObjectResponse> objects = new ArrayList<>();
-        for (SceneObjectEntity row : sceneObjectMapper.findAll()) {
-            List<String> labels = readLabels(row.getStyleLabels());
-            if (!InteractionValidator.isSceneObject(
-                    row.getObjectKey(), row.getDisplayName(), labels, row.getDefaultStyle(), row.getSortOrder())) {
-                throw new InvalidCatalogException();
-            }
-            objects.add(new SceneObjectResponse(
-                    row.getObjectKey(),
-                    row.getDisplayName(),
-                    labels,
-                    row.getDefaultStyle(),
-                    row.getSortOrder()));
-        }
-        return objects;
-    }
-
-    private List<String> readLabels(String raw) {
-        if (raw == null) {
-            throw new InvalidCatalogException();
-        }
-        try {
-            JsonNode node = objectMapper.readTree(raw);
-            if (node == null || !node.isArray()) {
-                throw new InvalidCatalogException();
-            }
-            List<String> labels = new ArrayList<>();
-            for (JsonNode item : node) {
-                if (!item.isTextual()) {
-                    throw new InvalidCatalogException();
-                }
-                labels.add(item.asText());
-            }
-            return labels;
-        } catch (JsonProcessingException ex) {
-            throw new StoredJsonException();
-        }
-    }
+    List<SceneObjectResponse> list();
 }

@@ -18,14 +18,14 @@ import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mairy.konbini.config.ApiResponseFilter;
 import com.mairy.konbini.config.ApiWebConfig;
-import com.mairy.konbini.entity.SceneObjectEntity;
-import com.mairy.konbini.entity.SceneSettingEntity;
-import com.mairy.konbini.repository.DatabaseProbeMapper;
-import com.mairy.konbini.repository.SceneObjectMapper;
-import com.mairy.konbini.repository.SceneSettingMapper;
-import com.mairy.konbini.service.HealthService;
-import com.mairy.konbini.service.SceneObjectService;
-import com.mairy.konbini.service.SettingsService;
+import com.mairy.konbini.entity.SceneObject;
+import com.mairy.konbini.entity.SceneSetting;
+import com.mairy.konbini.mapper.DatabaseProbeMapper;
+import com.mairy.konbini.mapper.SceneObjectMapper;
+import com.mairy.konbini.mapper.SceneSettingMapper;
+import com.mairy.konbini.service.impl.HealthServiceImpl;
+import com.mairy.konbini.service.impl.SceneObjectServiceImpl;
+import com.mairy.konbini.service.impl.SettingsServiceImpl;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -38,7 +38,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * 用模拟仓储核对前端依赖的状态码和 JSON 形状，不连接 MySQL。
+ * 用模拟 Mapper 核对前端依赖的状态码和 JSON 形状，不连接 MySQL。
  */
 @WebMvcTest(controllers = {
         HealthController.class,
@@ -46,9 +46,9 @@ import org.springframework.test.web.servlet.MockMvc;
         ObjectsController.class
 })
 @Import({
-        HealthService.class,
-        SettingsService.class,
-        SceneObjectService.class,
+        HealthServiceImpl.class,
+        SettingsServiceImpl.class,
+        SceneObjectServiceImpl.class,
         ApiResponseFilter.class,
         ApiWebConfig.class
 })
@@ -89,10 +89,10 @@ class ApiContractTest {
     /** 验证雨水关闭与原有设置一起持久化。 */
     @Test
     void settingsRoundTripPreservesJsonValues() throws Exception {
-        SceneSettingEntity camera = new SceneSettingEntity();
+        SceneSetting camera = new SceneSetting();
         camera.setSettingKey("camera");
         camera.setSettingValue("{\"position\":[19,16,23],\"target\":[0,1.1,0]}");
-        SceneSettingEntity reveal = new SceneSettingEntity();
+        SceneSetting reveal = new SceneSetting();
         reveal.setSettingKey("reveal");
         reveal.setSettingValue("{\"enabled\":false}");
         when(settingMapper.findAll()).thenReturn(List.of(camera, reveal));
@@ -123,7 +123,7 @@ class ApiContractTest {
     /** 验证旧库读取及旧客户端保存均补齐默认开启，关闭偏好可刷新读取。 */
     @Test
     void defaultsLegacyRainPreferenceAndReadsSavedPreference() throws Exception {
-        SceneSettingEntity interaction = new SceneSettingEntity();
+        SceneSetting interaction = new SceneSetting();
         interaction.setSettingKey("interaction");
         String legacy = "{\"exploded\":false,\"styles\":{},\"version\":1}";
         interaction.setSettingValue(legacy);
@@ -213,6 +213,9 @@ class ApiContractTest {
                 .andExpect(jsonPath("$.error").value("接口不存在"));
     }
 
+    /**
+     * 验证物件目录响应，并隐藏无效目录行的原始内容。
+     */
     @Test
     void returnsObjectCatalogAndHidesInvalidRows() throws Exception {
         when(objectMapperDao.findAll()).thenReturn(List.of(lamp()));
@@ -224,7 +227,7 @@ class ApiContractTest {
                 .andExpect(jsonPath("$[0].defaultStyle").value(0))
                 .andExpect(jsonPath("$[0].sortOrder").value(5));
 
-        SceneObjectEntity broken = lamp();
+        SceneObject broken = lamp();
         broken.setDisplayName("SHOULD_NOT_LEAK");
         broken.setStyleLabels("[]");
         when(objectMapperDao.findAll()).thenReturn(List.of(broken));
@@ -234,8 +237,11 @@ class ApiContractTest {
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("SHOULD_NOT_LEAK"))));
     }
 
-    private static SceneObjectEntity lamp() {
-        SceneObjectEntity row = new SceneObjectEntity();
+    /**
+     * 创建目录接口测试使用的路灯数据。
+     */
+    private static SceneObject lamp() {
+        SceneObject row = new SceneObject();
         row.setObjectKey("lamp");
         row.setDisplayName("路灯");
         row.setStyleLabels("[\"暖黄灯\",\"冷白灯\",\"霓虹紫\"]");

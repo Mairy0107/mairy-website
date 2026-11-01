@@ -1,4 +1,4 @@
-package com.mairy.konbini.repository;
+package com.mairy.konbini.mapper;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Blob;

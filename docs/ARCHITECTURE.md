@@ -18,7 +18,7 @@
 | `shared/interaction.ts` | 前端交互类型、物件键及运行时校验；Java 侧有对应校验 | 校验函数 |
 | `backend` controller | `/api/health`、`/api/settings`、`/api/objects` 的状态码与 JSON | REST 控制器 |
 | `backend` service | 设置解析、interaction 校验、目录整理 | `SettingsService` 等 |
-| `backend` repository | MyBatis 参数化 SQL | `SceneSettingMapper` 等 |
+| `backend` mapper | MyBatis 参数化 SQL | `SceneSettingMapper` 等 |
 | `backend` entity / dto | 表行与返回给前端的驼峰结构 | 实体与响应 |
 | `backend` config | `.env`、必填变量、64 KB 请求上限 | 启动配置 |
 | `scene/controls.ts` | OrbitControls 鼠标、触屏、距离与角度约束 | 返回 controls |
