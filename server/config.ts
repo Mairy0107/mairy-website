@@ -19,6 +19,8 @@ function port(value: string, name: string): number {
 
 export const CONFIG = {
   port: port(process.env.PORT ?? '3001', 'PORT'),
+  // 容器内需 0.0.0.0；本地默认回环。
+  host: (process.env.LISTEN_HOST ?? '127.0.0.1').trim() || '127.0.0.1',
   mysql: {
     host: required('MYSQL_HOST'),
     port: port(process.env.MYSQL_PORT ?? '3306', 'MYSQL_PORT'),
