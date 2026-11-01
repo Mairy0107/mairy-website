@@ -2,8 +2,8 @@ import { createApp } from './app.js';
 import { CONFIG } from './config.js';
 import { pool } from './db.js';
 
-const server = createApp().listen(CONFIG.port, '127.0.0.1', () => {
-  console.log(`API listening on http://127.0.0.1:${CONFIG.port}`);
+const server = createApp().listen(CONFIG.port, CONFIG.host, () => {
+  console.log(`API listening on http://${CONFIG.host}:${CONFIG.port}`);
 });
 
 /** 退出前停止接收请求并关闭共享数据库连接池。 */
