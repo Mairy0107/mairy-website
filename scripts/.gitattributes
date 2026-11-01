@@ -1,0 +1,2 @@
+# Windows 检出时也保持 bash 脚本的 LF 换行。
+*.sh text eol=lf

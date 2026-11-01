@@ -1,0 +1,14 @@
+# 在仓库根目录先执行：mvn -f backend/pom.xml -DskipTests package
+# 将 backend/target/konbini-api.jar 复制为 backend/konbini-api.jar，再执行：
+# docker build -f backend/Dockerfile.runtime -t mairy-konbini-api:latest backend
+# 复用现有 jar，只刷新运行镜像；监听端口与 JVM 配置沿用 Dockerfile。
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --home-dir /app app
+COPY --chown=10001:10001 konbini-api.jar /app/konbini-api.jar
+USER app
+EXPOSE 3001
+ENV PORT=3001 \
+    LISTEN_HOST=0.0.0.0 \
+    JAVA_OPTS="-Xms64m -Xmx256m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/konbini-api.jar"]

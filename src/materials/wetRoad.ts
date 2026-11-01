@@ -3,14 +3,15 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { CONFIG } from '../scene/config';
 import { canvasTexture } from './palette';
 
-/** 创建真实平面倒影，并用噪声分布控制积水与细微雨纹。 */
-export function createWetRoad(scene: THREE.Object3D): { update: (time: number) => void; dispose: () => void } {
+/** 创建平面倒影，并按雨水状态平滑调整积水、雨纹与地面色晕。 */
+export function createWetRoad(scene: THREE.Object3D): { setWetness: (wet: boolean) => void; update: (time: number) => void; dispose: () => void } {
   const shader = {
     uniforms: {
       color: { value: new THREE.Color('#344254') },
       tDiffuse: { value: null },
       textureMatrix: { value: new THREE.Matrix4() },
       uTime: { value: 0 },
+      uWetness: { value: 1 },
     },
     vertexShader: `
       uniform mat4 textureMatrix;
@@ -26,6 +27,7 @@ export function createWetRoad(scene: THREE.Object3D): { update: (time: number) =
       uniform sampler2D tDiffuse;
       uniform vec3 color;
       uniform float uTime;
+      uniform float uWetness;
       varying vec4 vReflection;
       varying vec2 vWorld;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -38,10 +40,12 @@ export function createWetRoad(scene: THREE.Object3D): { update: (time: number) =
       void main() {
         float pools = smoothstep(0.35, 0.7, noise(vWorld * 0.9));
         vec4 uv = vReflection;
-        uv.xy += vec2(sin(vWorld.y * 53. + uTime * 2.), cos(vWorld.x * 47. - uTime)) * 0.00045 * uv.w;
+        uv.xy += vec2(sin(vWorld.y * 53. + uTime * 2.), cos(vWorld.x * 47. - uTime)) * 0.00045 * uWetness * uv.w;
         vec3 reflection = texture2DProj(tDiffuse, uv).rgb;
         float grain = noise(vWorld * 150.) * 0.012;
-        gl_FragColor = vec4(mix(color * (0.27 + grain), reflection, 0.12 + pools * 0.40), 1.0);
+        // 干路面保留微弱倒影，积水明暗差随湿度收敛。
+        float reflectionMix = mix(0.025 + pools * 0.025, 0.12 + pools * 0.40, uWetness);
+        gl_FragColor = vec4(mix(color * (0.27 + grain), reflection, reflectionMix), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -74,16 +78,31 @@ export function createWetRoad(scene: THREE.Object3D): { update: (time: number) =
     gradient.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, 2, 2);
   });
+  const washes: Array<{ mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; material: THREE.MeshBasicMaterial }> = [];
   for (const [x, z, width, length, color] of [
     [-1.7, 4.05, 5, 2.3, '#6ce0c4'], [-6.58, 3.68, 1.2, 1.5, '#e581b9'], [2.17, 4.5, 1.1, 2.4, '#f7cb8f'],
   ] as const) {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, length), new THREE.MeshBasicMaterial({ map: washTexture, color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
     mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.017, z); scene.add(mesh);
+    washes.push({ mesh, material: mesh.material });
   }
+  let targetWetness = 1;
+  let lastTime: number | undefined;
   return {
-    // 每帧只更新 uniform；积水几何保持不变。
-    update(time: number): void { material.uniforms.uTime.value = time; },
-    // 反射目标不在普通材质贴图属性中，需要显式释放。
+    /** 设置目标湿度；首帧直接应用保存状态，后续切换平滑过渡。 */
+    setWetness(wet: boolean): void { targetWetness = wet ? 1 : 0; },
+    /** 用可见时间推进湿度，统一调整倒影、积水、雨纹和地面色晕。 */
+    update(time: number): void {
+      const delta = lastTime === undefined ? 0 : Math.max(0, Math.min(time - lastTime, 0.05));
+      let wetness = lastTime === undefined ? targetWetness : THREE.MathUtils.damp(material.uniforms.uWetness.value, targetWetness, 5, delta);
+      if (Math.abs(wetness - targetWetness) < 0.001) wetness = targetWetness;
+      material.uniforms.uTime.value = time;
+      material.uniforms.uWetness.value = wetness;
+      lastTime = time;
+      // 入场动画会克隆材质，同时更新当前材质与原材质以避免恢复时跳变。
+      for (const { mesh, material } of washes) mesh.material.opacity = material.opacity = THREE.MathUtils.lerp(0.025, 0.22, wetness);
+    },
+    /** 显式释放反射目标，其余材质与几何由场景统一回收。 */
     dispose(): void { reflector.dispose(); },
   };
 }

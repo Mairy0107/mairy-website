@@ -66,8 +66,8 @@ const STYLES: Record<ObjectKey, readonly [{ color: string; glow: string }, { col
   ac: [{ color: '#dfd2b6', glow: '#fff0cc' }, { color: '#3e7373', glow: '#91d6d6' }],
 };
 
-/** 隔离物件材质及绽开父组，并统一协调雨水偏好与绽开状态。 */
-export function createObjectInteraction(scene: THREE.Scene, settings: SceneSettings, weather?: { setVisible: (visible: boolean) => void }): ObjectInteraction {
+/** 隔离物件材质及绽开父组，并统一协调天气、路面湿度与绽开状态。 */
+export function createObjectInteraction(scene: THREE.Scene, settings: SceneSettings, weather?: { setVisible: (visible: boolean) => void }, road?: { setWetness: (wet: boolean) => void }): ObjectInteraction {
   const objects = new Map<ObjectKey, THREE.Group>();
   scene.traverse((object) => {
     // 仅登记物件根组（name 与 key 一致），忽略便利店内部带 storePart 的子组。
@@ -172,9 +172,11 @@ export function createObjectInteraction(scene: THREE.Scene, settings: SceneSetti
     settings.interaction.styles[key] = style;
   }
 
-  /** 根据雨水偏好与绽开状态同步雨丝、涟漪可见性。 */
+  /** 根据雨水偏好与绽开状态同步雨丝、涟漪及路面湿度。 */
   function syncWeather(): void {
-    weather?.setVisible(settings.interaction.rainEnabled && !settings.interaction.exploded);
+    const wet = settings.interaction.rainEnabled && !settings.interaction.exploded;
+    weather?.setVisible(wet);
+    road?.setWetness(wet);
   }
 
   /** 更新雨水偏好，绽开期间仍隐藏雨效。 */

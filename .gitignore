@@ -13,3 +13,8 @@ coverage/
 .env
 .env.local
 
+
+# Built artifacts
+*.jar
+backend/konbini-api.jar
+

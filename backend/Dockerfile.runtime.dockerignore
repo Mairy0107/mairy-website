@@ -1,0 +1,3 @@
+# runtime 构建仅保留上下文根目录下已复制好的 jar。
+*
+!konbini-api.jar

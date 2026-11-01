@@ -51,7 +51,8 @@ export function createScene(settings: SceneSettings): () => void {
   // 先保留入场目标，再添加独立运动父组，避免两套动画覆盖同一位置。
   const propTargets = [...props.children];
   const ac = scene.getObjectByName('ac')!;
-  const interaction = createObjectInteraction(scene, settings, weather);
+  // 雨水开关和绽开状态统一控制天气与路面湿度。
+  const interaction = createObjectInteraction(scene, settings, weather, road);
   const reveal = createReveal(scene, [
     { object: base, delay: 0, rise: 0, scale: 1, duration: 1 },
     { object: roadRoot, delay: 0.12, rise: 0, scale: 1, duration: 1 },
