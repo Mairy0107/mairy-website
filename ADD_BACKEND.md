@@ -1,5 +1,7 @@
 # Add backend + MySQL settings API
 
+> 历史任务。当前接口已由 `backend/` 里的 Spring Boot 提供，不再使用 Express。
+
 Use the existing Vite + TypeScript + three.js frontend in this directory. Add a small Node.js (Express or Fastify) backend that talks to the **cloud MySQL already configured in `.env`** (MYSQL_HOST/PORT/USER/PASSWORD/DATABASE). Do not invent new DB credentials. Do not print secrets.
 
 ## Database
