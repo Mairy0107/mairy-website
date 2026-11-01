@@ -3,6 +3,8 @@ import { CONFIG } from './config';
 
 export interface Weather {
   update: (time: number) => void;
+  /** 绽开分解图时关闭雨丝与涟漪，还原后恢复。 */
+  setVisible: (visible: boolean) => void;
 }
 
 /** 用 GPU 位移绘制细雨，以实例化圆环表现道路上的落雨涟漪。 */
@@ -73,6 +75,7 @@ export function createWeather(scene: THREE.Object3D): Weather {
   return {
     /** 仅更新雨丝时间和涟漪实例矩阵，不创建逐帧几何。 */
     update(time: number): void {
+      if (!rain.visible) return;
       material.uniforms.uTime.value = time;
       drops.forEach((drop, index) => {
         const age = (time * 0.57 + drop.phase) % 1;
@@ -85,6 +88,10 @@ export function createWeather(scene: THREE.Object3D): Weather {
       });
       ripples.instanceMatrix.needsUpdate = true;
       if (ripples.instanceColor) ripples.instanceColor.needsUpdate = true;
+    },
+    setVisible(visible: boolean): void {
+      rain.visible = visible;
+      ripples.visible = visible;
     },
   };
 }

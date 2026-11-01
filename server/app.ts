@@ -2,8 +2,10 @@ import express from 'express';
 import type { ErrorRequestHandler } from 'express';
 import { checkDatabase } from './db.js';
 import { getAll, getByKey, setByKey } from './settings.repo.js';
+import { getObjects } from './objects.repo.js';
+import { isInteractionSettings } from '../shared/interaction.js';
 
-/** 创建无界面的设置 API，所有错误响应均隐藏数据库及环境细节。 */
+/** 创建物件与设置 API，所有错误响应均隐藏数据库及环境细节。 */
 export function createApp(): express.Express {
   const app = express();
   app.disable('x-powered-by');
@@ -29,6 +31,11 @@ export function createApp(): express.Express {
     res.json(await getAll());
   });
 
+  /** 返回数据库中的物件名称、三款样式与默认排序。 */
+  app.get('/api/objects', async (_req, res) => {
+    res.json(await getObjects());
+  });
+
   /** 返回单个设置，缺失的键使用 404。 */
   app.get('/api/settings/:key', async (req, res) => {
     const value = await getByKey(req.params.key);
@@ -47,6 +54,11 @@ export function createApp(): express.Express {
     }
     if (req.body === undefined) {
       res.status(400).json({ error: '请求体必须是 JSON 值' });
+      return;
+    }
+    // 交互设置只接受约定版本、布尔开关和合法物件的三款样式索引。
+    if (req.params.key === 'interaction' && !isInteractionSettings(req.body)) {
+      res.status(400).json({ error: '交互设置格式无效，请使用 version: 1、exploded 布尔值及 0/1/2 样式' });
       return;
     }
     await setByKey(req.params.key, req.body);

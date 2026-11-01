@@ -1,6 +1,6 @@
 # 雨夜 · 街角便利店
 
-一个可以自由旋转观看的日式便利店微缩景观。完整的正方形底座上，暖色橱窗、薄荷绿招牌与粉色贩卖机照亮雨夜街角；细雨、积水倒影和斑马线高光形成安静的动画夜景。页面只展示三维模型，没有按钮、面板、标尺或其他 UI。招牌和海报文字均属于场景内的实体物件。
+一个可以自由旋转观看的日式便利店微缩景观。完整的正方形底座上，暖色橱窗、薄荷绿招牌与粉色贩卖机照亮雨夜街角；细雨、积水倒影和斑马线高光形成安静的动画夜景。右侧中文半透明面板可选择十类物件、切换三款配色、绽开或还原模型，并保存到服务器。鼠标悬停显示物件名称；招牌和海报仍属于场景内的实体物件。
 
 ## 效果说明
 
@@ -18,7 +18,7 @@ Vite 7、TypeScript 5.9、three.js 0.180、OrbitControls、EffectComposer、Unre
 
 使用 Node.js 22.12+ 或 Node.js 24 LTS，包管理器使用 npm。
 
-使用项目已有的 `.env` 连接云 MySQL，不要覆盖连接信息。新环境可参考 `.env.example` 填写 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`（现有数据库为 `test_01`），通过 `PORT` 设置 API 端口，默认 3001。`.env` 已被 Git 忽略，禁止提交真实密码。数据库需已有 `scene_settings(setting_key, setting_value, updated_at)` 表；程序不会建表或覆盖种子数据。
+使用项目已有的 `.env` 连接云 MySQL，不要覆盖连接信息。新环境可参考 `.env.example` 填写 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`（现有数据库为 `test_01`），通过 `PORT` 设置 API 端口，默认 3001。`.env` 已被 Git 忽略，禁止提交真实密码。数据库需已有 `scene_settings(setting_key, setting_value, updated_at)` 和 `scene_objects(object_key, display_name, style_labels, default_style, sort_order)` 表；程序不会建表或覆盖种子数据。交互保存使用全局 `scene_settings.interaction`，本次不使用按访客区分的 `scene_object_prefs`。
 
 ```powershell
 npm install
@@ -34,13 +34,16 @@ npm run dev
 | 接口 | 行为 |
 | --- | --- |
 | `GET /api/health` | 检查 API 和数据库，成功返回 200，数据库不可用返回 503 |
+| `GET /api/objects` | 按排序返回物件目录，字段为 objectKey、displayName、styleLabels（三个中文名）、defaultStyle、sortOrder |
+| `GET /api/settings/interaction` | 读取全局绽开状态和物件样式 |
+| `PUT /api/settings/interaction` | 校验并保存整体交互状态，无效版本、物件键或样式索引返回 400 |
 | `GET /api/settings` | 一次查询返回所有设置组成的对象 |
 | `GET /api/settings/:key` | 返回该键的 JSON 值，不存在返回 404 |
 | `PUT /api/settings/:key` | 使用 `Content-Type: application/json` 新增或覆盖该键，返回保存值 |
 
-PUT 请求体直接使用 JSON 值，不需包装为 `setting_value`，支持对象、数组、字符串、数字、布尔值和 null，最大 64 KB。相机示例：`{"position":[19,16,23],"target":[0,1.1,0]}`。`reveal` 使用 `{"enabled":false}` 可关闭入场动画；仍遵循系统的减少动态效果设置。
+PUT 请求体直接使用 JSON 值，不需包装为 `setting_value`，除 interaction 使用专用格式外，其他设置支持对象、数组、字符串、数字、布尔值和 null，最大 64 KB。相机示例：`{"position":[19,16,23],"target":[0,1.1,0]}`。`reveal` 使用 `{"enabled":false}` 可关闭入场动画；仍遵循系统的减少动态效果设置。
 
-页面启动时通过 `/api/settings` 读取相机与可选入场开关；请求失败、超过三秒或字段无效时，使用 `src/scene/config.ts` 的默认值。相机坐标必须为三个有限数字。修改数据库设置后刷新页面生效，无需重写前端，不增加 UI/HUD。
+页面启动时并行读取 `/api/settings` 与 `/api/objects`，应用相机、入场、绽开状态和物件样式。请求失败、超过三秒或字段无效时回退到本地默认值，面板显示中文提示；相机坐标必须为三个有限数字。交互请求体示例：`{"exploded":true,"styles":{"store":1,"lamp":2},"version":1}`；未指定的物件样式沿用目录默认值。按钮操作立即更新本地预览，点击“保存到服务器”后持久化，刷新页面恢复；保存超时或失败可重试。
 
 API 尚未提供身份验证，仅监听本机回环地址；通过反向代理开放写接口时，应在代理层添加访问控制。错误响应不会包含数据库连接信息。
 
@@ -67,10 +70,14 @@ curl.exe http://127.0.0.1:3001/api/settings
 | 鼠标左键拖拽 | 围绕模型旋转 |
 | 鼠标滚轮 | 拉近或拉远 |
 | 鼠标右键或中键拖拽 | 平移观察目标 |
+| 悬停物件 | 显示中文名称 |
+| 点击物件 / 右侧物件按钮 | 选中物件并显示三款中文样式按钮 |
+| 绽开模型 / 还原 | 平滑分离十类主要物件或精确恢复位置 |
+| 保存到服务器 | 保存当前绽开状态及全部物件样式，底座、路面与天气保持原样 |
 | 触屏单指拖拽 | 旋转 |
 | 触屏双指捏合或拖拽 | 缩放或平移 |
 
-镜头限制俯仰角度，避免翻入底座下方。页面没有操作提示覆盖层。
+镜头限制俯仰角度，避免翻入底座下方。面板以外的覆盖层和名称提示不拦截鼠标，画布仍可自由拖拽；窄屏面板限制高度并允许滚动。减少动态效果模式直接切换绽开状态。公告栏样式仅调整边框配色，海报图案沿用原有纹理。
 
 ## 目录结构
 
@@ -115,6 +122,6 @@ curl.exe http://127.0.0.1:3001/api/settings
 
 像素比上限、反射分辨率、阴影分辨率与雨丝数量集中在 `src/scene/config.ts`。只有月光计算阴影，静态阴影首帧生成后复用；反射仍随镜头与天气更新。商品、涟漪使用实例化；盒体几何和卡通材质按参数缓存。
 
-后续可以在保留无 UI 展示的前提下，加入自动门感应、雨棚滴水、可选环境音或更精细的货架道具。若增加动态投影物体，应重新开启阴影更新或在变化后设置 `renderer.shadowMap.needsUpdate = true`。若面向低功耗设备，优先降低反射分辨率、像素比与雨丝数量。
+后续可以加入自动门感应、雨棚滴水、可选环境音或更精细的货架道具。若增加动态投影物体，应重新开启阴影更新或在变化后设置 `renderer.shadowMap.needsUpdate = true`。若面向低功耗设备，优先降低反射分辨率、像素比与雨丝数量。
 
 布局与模块职责详见 [架构文档](docs/ARCHITECTURE.md) 和 [场景规格](docs/SCENE_SPEC.md)。

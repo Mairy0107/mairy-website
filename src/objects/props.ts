@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { box, group, ring, rod } from './primitives';
 import { canvasTexture, glow, toon } from '../materials/palette';
+import { nameObject, nameExplodePart } from './catalog';
+import type { ObjectKey } from '../../shared/interaction';
 
 /** 简化管件端点的三维坐标创建。 */
 const v = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
@@ -143,7 +145,8 @@ function createStreetLamp(parent: THREE.Object3D): void {
   });
   box(lamp, [1.35, 0.34, 0.06], [0.32, 3.2, 0.09], new THREE.MeshBasicMaterial({ map: texture }));
   const light = new THREE.PointLight('#ffcf8c', 30, 9, 2);
-  light.position.set(-0.62, 4.18, 0); parent.add(light); light.position.add(lamp.position);
+  // 灯光归属路灯，绽开时随灯体移动。
+  light.position.set(-0.62, 4.18, 0); lamp.add(light);
 }
 
 /** 生成电线杆、变压器、绝缘子与垂落电线。 */
@@ -181,16 +184,7 @@ function createAlley(parent: THREE.Object3D): void {
   box(wall, [1.6, 1.8, 0.17], [5.7, 0.9, -7.65], '#6a7f8c', true);
   box(wall, [0.75, 1.38, 0.03], [5.7, 0.71, -7.55], '#3f5b6d');
   box(wall, [0.5, 0.06, 0.16], [5.7, 1.64, -7.45], glow('#9dd3d1', 1.5));
-  for (const [x, z] of [[-6.7, -5.5], [2.6, -4.9], [-5.9, 0.6]]) {
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.18, 0.38, 8), toon('#b28b7c'));
-    pot.position.set(x, 0.37, z); parent.add(pot);
-    for (let i = 0; i < 5; i++) {
-      const angle = i * Math.PI * 0.4;
-      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.23, 0), toon(i % 2 ? '#779c8e' : '#547f78'));
-      leaf.position.set(x + Math.sin(angle) * 0.14, 0.69 + (i % 2) * 0.13, z + Math.cos(angle) * 0.14);
-      leaf.scale.set(0.8, 1.6, 0.8); parent.add(leaf);
-    }
-  }
+  // 盆栽改由 createPlanters 独立分组，便于分解图位移。
   const cone = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.57, 12), toon('#d88b76'));
   cone.position.set(4.2, 0.32, -6.7); parent.add(cone);
   box(parent, [0.4, 0.06, 0.4], [4.2, 0.04, -6.7], '#6b7182');
@@ -202,8 +196,36 @@ function createAlley(parent: THREE.Object3D): void {
 export function createProps(scene: THREE.Scene): THREE.Group {
   const root = group(scene, [0, 0, 0]);
   // 按完整道具分组，保持原有局部坐标并错开每组的入场时间。
-  for (const create of [createVendingMachine, createBicycle, createUmbrellaRack, createBins, createNoticeBoard, createGuardrails, createStreetLamp, createUtilityPoles, createAlley]) {
-    create(group(root, [0, 0, 0]));
+  const objects: Array<[ObjectKey, (parent: THREE.Object3D) => void]> = [
+    ['vending', createVendingMachine], ['bike', createBicycle], ['umbrella', createUmbrellaRack],
+    ['bins', createBins], ['notice', createNoticeBoard], ['guardrail', createGuardrails],
+    ['lamp', createStreetLamp], ['poles', createUtilityPoles],
+  ];
+  for (const [key, create] of objects) {
+    const object = group(root, [0, 0, 0]);
+    nameObject(object, key);
+    create(object);
   }
+  // 小巷只参与入场；盆栽单独分组参与分解图。
+  createAlley(group(root, [0, 0, 0]));
+  createPlanters(group(root, [0, 0, 0]));
   return root;
+}
+
+/** 人行道盆栽独立成组，绽开时外推并显示名称。 */
+function createPlanters(parent: THREE.Object3D): void {
+  const planters = group(parent, [0, 0, 0]);
+  nameExplodePart(planters, 'planters', '人行道盆栽');
+  for (const [x, z] of [[-6.7, -5.5], [2.6, -4.9], [-5.9, 0.6]] as const) {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.18, 0.38, 8), toon('#b28b7c'));
+    pot.position.set(x, 0.37, z);
+    planters.add(pot);
+    for (let i = 0; i < 5; i++) {
+      const angle = i * Math.PI * 0.4;
+      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.23, 0), toon(i % 2 ? '#779c8e' : '#547f78'));
+      leaf.position.set(x + Math.sin(angle) * 0.14, 0.69 + (i % 2) * 0.13, z + Math.cos(angle) * 0.14);
+      leaf.scale.set(0.8, 1.6, 0.8);
+      planters.add(leaf);
+    }
+  }
 }

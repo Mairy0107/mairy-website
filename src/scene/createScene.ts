@@ -11,6 +11,8 @@ import { createControls } from './controls';
 import { createLighting } from './lighting';
 import { createWeather } from './weather';
 import { createReveal } from './reveal';
+import { createObjectInteraction } from './interaction';
+import { createInteractionPanel } from './interactionPanel';
 import { CONFIG } from './config';
 import type { SceneSettings } from './settings';
 
@@ -46,15 +48,27 @@ export function createScene(settings: SceneSettings): () => void {
   const weather = createWeather(weatherRoot);
   const signage = store.getObjectByName('store-signage')!;
   const awning = store.getObjectByName('store-awning')!;
+  // 先保留入场目标，再添加独立运动父组，避免两套动画覆盖同一位置。
+  const propTargets = [...props.children];
+  const ac = scene.getObjectByName('ac')!;
+  const interaction = createObjectInteraction(scene, settings, weather);
   const reveal = createReveal(scene, [
     { object: base, delay: 0, rise: 0, scale: 1, duration: 1 },
     { object: roadRoot, delay: 0.12, rise: 0, scale: 1, duration: 1 },
     { object: store, delay: 0.5, duration: 1.5, rise: 0.28, scale: 0.97 },
     { object: signage, delay: 1.65, duration: 0.95, rise: 0.16 },
     { object: awning, delay: 1.85, duration: 0.95, rise: 0.14 },
-    ...props.children.map((object, index) => ({ object, delay: 2.15 + index * 0.17, rise: 0.24, scale: 0.9 })),
+    ...propTargets.map((object, index) => ({ object, delay: 2.15 + index * 0.17, rise: 0.24, scale: 0.9 })),
+    { object: ac, delay: 3.65, rise: 0.24, scale: 0.9 },
     { object: weatherRoot, delay: 2.1, duration: 2.7, rise: 0, scale: 1 },
   ], !settings.reveal.enabled || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  /** 用户调整时先恢复入场临时资源，使实时样式修改持续生效。 */
+  function finishReveal(): void {
+    reveal.dispose();
+    renderer.shadowMap.needsUpdate = true;
+  }
+  const panel = createInteractionPanel(camera, renderer.domElement, interaction, settings, finishReveal);
 
   // 后处理目标也开启多重采样，保证几何边缘在辉光处理后仍然平滑。
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -92,8 +106,11 @@ export function createScene(settings: SceneSettings): () => void {
     road.update(time);
     weather.update(time);
     // 入场期间持续更新变换与遮罩阴影，结束时补绘最终静态阴影。
-    if (reveal.update(time)) renderer.shadowMap.needsUpdate = true;
+    const moving = interaction.update(delta);
+    if (reveal.update(time) || moving) renderer.shadowMap.needsUpdate = true;
     composer.render();
+    // 渲染已刷新世界矩阵，名称提示跟随当前镜头与物件位置。
+    panel.update();
     // 入场结束后沿用静态阴影；天气与涟漪不投影。
     renderer.shadowMap.autoUpdate = false;
   }
@@ -115,9 +132,11 @@ export function createScene(settings: SceneSettings): () => void {
     renderer.setAnimationLoop(null);
     window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', visibility);
+    panel.dispose();
     controls.dispose();
     // 先恢复原材质，再统一收集资源，避免遗漏入场途中被替换的材质。
     reveal.dispose();
+    interaction.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     const textures = new Set<THREE.Texture>();
