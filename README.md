@@ -12,13 +12,42 @@
 
 ## 技术栈
 
-Vite 7、TypeScript 5.9、three.js 0.180、OrbitControls、EffectComposer、UnrealBloomPass；后端使用 Node.js、Express 和 mysql2 连接云 MySQL。数据库凭据只在服务端使用。几何与招牌纹理均由代码生成，无外部贴图、远程字体或模型下载，具体依赖版本由 `package-lock.json` 锁定。
+Vite 7、TypeScript 5.9、three.js 0.180、OrbitControls、EffectComposer、UnrealBloomPass。后端是 Spring Boot 3.5 与 Java 17，使用 MyBatis 连接云 MySQL。数据库凭据只在服务端使用。几何与招牌纹理均由代码生成，无外部贴图、远程字体或模型下载，前端依赖版本由 `package-lock.json` 锁定。
 
-## 环境与本地启动
+## 用 IntelliJ IDEA 运行后端
 
-使用 Node.js 22.12+ 或 Node.js 24 LTS，包管理器使用 npm。
+需要 JDK 17 或更高（工程字节码目标是 17）。用 IDEA 打开仓库根目录，把 `backend` 识别为 Maven 模块，等待依赖下载完成。
 
-使用项目已有的 `.env` 连接云 MySQL，不要覆盖连接信息。新环境可参考 `.env.example` 填写 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`（现有数据库为 `test_01`），通过 `PORT` 设置 API 端口，默认 3001。`.env` 已被 Git 忽略，禁止提交真实密码。数据库需已有 `scene_settings(setting_key, setting_value, updated_at)` 和 `scene_objects(object_key, display_name, style_labels, default_style, sort_order)` 表；程序不会建表或覆盖种子数据。交互保存使用全局 `scene_settings.interaction`，本次不使用按访客区分的 `scene_object_prefs`。
+主类是 `com.mairy.konbini.KonbiniApplication`。运行配置的工作目录设为仓库根目录，这样会读到根目录的 `.env`。工作目录如果是 `backend`，也会改读上一级 `.env`。已经在系统或 IDEA 环境变量里设置的值优先于文件，程序不会把密码写进日志。
+
+复制 `.env.example` 为 `.env` 后填写现有云 MySQL，不要覆盖已有连接信息，也不要提交 `.env`：
+
+| 变量 | 作用 |
+| --- | --- |
+| `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` | 连接 `test_01`。密码只放在环境变量或 `.env` |
+| `MYSQL_SSL_MODE` | 默认 `DISABLED`，与原先客户端一致。实例要求加密时改为 `REQUIRED` |
+| `PORT` | API 端口，默认 `3001` |
+| `LISTEN_HOST` | 本机用 `127.0.0.1`。容器里给 nginx 访问时用 `0.0.0.0` |
+
+数据库需已有 `scene_settings(setting_key, setting_value, updated_at)` 和 `scene_objects(object_key, display_name, style_labels, default_style, sort_order)`。程序不会建表，也不会覆盖种子数据。交互保存仍写入全局 `scene_settings.interaction`。`scene_object_prefs` 按访客保留，当前接口不读写它。
+
+表和列的中文注释在 `db/migration/V1__comment_scene_tables.sql`。脚本按现有列类型写回注释，不删除行、不重建表。在业务库中执行一次即可，重复执行也只是再次写入同一句注释：
+
+```bash
+mysql --default-character-set=utf8mb4 -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p "$MYSQL_DATABASE" < db/migration/V1__comment_scene_tables.sql
+```
+
+IDEA 的 Maven 面板对 `backend` 执行 `package`，或在 `backend` 目录运行 `mvn package`。产物是 `backend/target/konbini-api.jar`。2C2G 云主机把堆限制在 256m：
+
+```powershell
+java -Xms64m -Xmx256m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -jar backend/target/konbini-api.jar
+```
+
+若连接池和页面构建会同时占用内存，把 `-Xmx256m` 改为 `-Xmx512m`。两种都使用 Serial GC，避免 G1 在小堆上的额外占用。
+
+## 本地前端
+
+前端使用 Node.js 22.12+ 或 Node.js 24 LTS，包管理器使用 npm。先启动上面的 API，再在仓库根目录执行：
 
 ```powershell
 npm install
@@ -27,7 +56,7 @@ npm run dev
 
 打开终端输出的本地地址，通常是 `http://localhost:5173`。如果端口被占用，Vite 会自动选择可用端口。运行时需要支持 WebGL 2 的现代浏览器和硬件加速。
 
-`npm run dev` 同时启动前后端；也可以分别执行 `npm run dev:web` 和 `npm run dev:api`。API 监听 `127.0.0.1:PORT`，Vite 将 `/api` 代理到该地址。修改端口后需重启前后端。
+`npm run dev` 只启动页面。Vite 把 `/api` 代理到 `http://127.0.0.1:PORT`（默认 3001），代理目标来自根目录 `.env` 的 `PORT`，不会把 MySQL 变量打进浏览器包。修改端口后需同时重启 API 和 Vite。
 
 ## 场景设置 API
 
@@ -45,7 +74,7 @@ PUT 请求体直接使用 JSON 值，不需包装为 `setting_value`，除 inter
 
 页面启动时并行读取 `/api/settings` 与 `/api/objects`，应用相机、入场、绽开状态和物件样式。请求失败、超过三秒或字段无效时回退到本地默认值，面板显示中文提示；相机坐标必须为三个有限数字。交互请求体示例：`{"exploded":true,"styles":{"store":1,"lamp":2},"version":1}`；未指定的物件样式沿用目录默认值。按钮操作立即更新本地预览，点击“保存到服务器”后持久化，刷新页面恢复；保存超时或失败可重试。
 
-API 尚未提供身份验证，仅监听本机回环地址；通过反向代理开放写接口时，应在代理层添加访问控制。错误响应不会包含数据库连接信息。
+API 尚未提供身份验证。本机默认只监听 `127.0.0.1`；容器通过 `LISTEN_HOST=0.0.0.0` 给同机 nginx 访问。通过反向代理开放写接口时，应在代理层添加访问控制。错误响应不会包含数据库连接信息。
 
 ## 构建与预览
 
@@ -54,7 +83,25 @@ npm run build
 npm run preview
 ```
 
-`build` 先执行前端 TypeScript 严格类型检查，再生成 `dist/`；`npm run check:api` 单独检查后端类型。`preview` 通常在 `http://localhost:4173` 提供构建产物，也会代理 `/api`，需同时运行 `npm start`。`npm start` 使用 tsx 直接运行 API，需要安装开发依赖。部署时发布静态 `dist/`、启动 API，并将同源 `/api` 转发到 `127.0.0.1:PORT`。仅发布静态页面时使用本地默认设置。
+`build` 先执行前端 TypeScript 严格类型检查，再生成 `dist/`。`preview` 通常在 `http://localhost:4173` 提供构建产物，也会代理 `/api`，需同时运行 Spring Boot。部署时发布静态 `dist/`、用上面的 `java -jar` 启动 API，并把同源 `/api` 原样转发到 API 端口。仅发布静态页面时使用本地默认设置。
+
+替换原来的 `site-api` 容器时，在仓库根目录构建镜像。容器监听 3001，默认堆 256m，`LISTEN_HOST` 为 `0.0.0.0`。nginx 保持 `/api` 前缀，转发到同一端口：
+
+```nginx
+location /api/ {
+    proxy_pass http://site-api:3001;
+}
+```
+
+```bash
+docker build -t site-api backend
+docker run --rm -p 3001:3001 \
+  -e MYSQL_HOST=... -e MYSQL_PORT=3306 -e MYSQL_USER=... \
+  -e MYSQL_PASSWORD=... -e MYSQL_DATABASE=test_01 \
+  site-api
+```
+
+需要 512m 堆时覆盖整个 `JAVA_OPTS`，并保留退出保护：`-e JAVA_OPTS=-Xms64m -Xmx512m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError`。镜像构建会跳过测试；发布前在本机执行 `mvn -f backend/pom.xml package`。
 
 API 启动后可在终端冒烟检查（端口与 `.env` 一致）：
 
@@ -88,31 +135,18 @@ curl.exe http://127.0.0.1:3001/api/settings
 ├── tsconfig.json
 ├── vite.config.ts             # 相对资源路径与引擎分包
 ├── .env.example               # 不含真实凭据的配置模板
-├── server/
-│   ├── config.ts              # 服务端环境配置
-│   ├── db.ts                  # MySQL 连接池与健康检查
-│   ├── settings.repo.ts       # 参数化查询与原子写入
-│   ├── app.ts                 # API 路由与错误处理
-│   ├── index.ts               # 启动与退出清理
-│   └── tsconfig.json          # 后端类型检查
+├── db/migration/              # 只补充中文注释的 SQL，不删除数据
+├── backend/                   # Spring Boot API，分层为 controller / service / repository / entity / dto / config
+│   ├── pom.xml
+│   ├── Dockerfile             # 替换 site-api，监听 3001
+│   └── src/main/java/com/mairy/konbini/
+├── shared/interaction.ts      # 前后端共用的物件键与交互校验
 ├── src/
-│   ├── main.ts                 # 启动与热更新清理
-│   ├── style.css               # 全屏画布
-│   ├── scene/
-│   │   ├── config.ts           # 全局配置与配色
-│   │   ├── settings.ts         # 远端设置加载、校验与默认回退
-│   │   ├── createScene.ts      # 场景装配与生命周期
-│   │   ├── controls.ts         # 相机控制
-│   │   ├── lighting.ts         # 灯光与阴影
-│   │   └── weather.ts          # 雨丝与涟漪
-│   ├── objects/
-│   │   ├── primitives.ts       # 几何与轮廓复用
-│   │   ├── base.ts             # 方形底座与道路
-│   │   ├── store.ts            # 店铺与空调
-│   │   └── props.ts            # 模块化街景道具
-│   └── materials/
-│       ├── palette.ts          # 卡通材质与程序纹理
-│       └── wetRoad.ts          # 平面积水倒影
+│   ├── main.ts                # 启动与热更新清理
+│   ├── style.css              # 全屏画布与交互面板
+│   ├── scene/                 # 场景、交互面板、设置加载
+│   ├── objects/               # 底座、店铺、道具与目录
+│   └── materials/             # 卡通材质与积水倒影
 └── docs/
     ├── ARCHITECTURE.md
     └── SCENE_SPEC.md

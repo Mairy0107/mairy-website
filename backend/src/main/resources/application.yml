@@ -1,0 +1,61 @@
+# 连接信息只从环境变量或仓库根目录 .env 读取，此文件不写密码。
+# 2C2G 云主机请把堆限制在 256m 或 512m，见 README 与 Dockerfile。
+
+server:
+  port: ${PORT:3001}
+  address: ${LISTEN_HOST:127.0.0.1}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+    whitelabel:
+      enabled: false
+  tomcat:
+    max-http-form-post-size: 64KB
+    max-swallow-size: 64KB
+
+spring:
+  application:
+    name: konbini-api
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+  mvc:
+    problemdetails:
+      enabled: false
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  jackson:
+    deserialization:
+      fail-on-trailing-tokens: true
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:test_01}?characterEncoding=UTF-8&connectionTimeZone=SERVER&connectTimeout=5000&socketTimeout=15000&sslMode=${MYSQL_SSL_MODE:DISABLED}&allowPublicKeyRetrieval=true&tinyInt1isBit=false&zeroDateTimeBehavior=CONVERT_TO_NULL
+    username: ${MYSQL_USER:}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: konbini
+      maximum-pool-size: 5
+      minimum-idle: 0
+      connection-timeout: 5000
+      # 负数表示启动时不立刻建连。数据库暂时不可用时进程仍可起来，由 /api/health 返回 503。
+      initialization-fail-timeout: -1
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+    default-statement-timeout: 5
+
+logging:
+  level:
+    root: INFO
+    com.zaxxer.hikari: WARN
+    org.mybatis: WARN
+    org.springframework.jdbc: WARN

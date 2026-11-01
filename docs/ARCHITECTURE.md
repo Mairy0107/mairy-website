@@ -2,7 +2,7 @@
 
 ## 设计目标
 
-使用程序化资源构造可自由观察的三维微缩模型，由小型 Node.js API 提供启动设置。页面 DOM 包含启动脚本、运行时画布与中文交互面板；实体招牌文字仍通过 CanvasTexture 绘制。交互面板的覆盖层空白区域与 tooltip 使用 pointer-events: none，只有面板接收事件。渲染模块以 three.js 的 Scene、Group、Material 为边界，不依赖应用框架。
+使用程序化资源构造可自由观察的三维微缩模型，由 Spring Boot API 提供启动设置和物件目录。页面 DOM 包含启动脚本、运行时画布与中文交互面板；实体招牌文字仍通过 CanvasTexture 绘制。交互面板的覆盖层空白区域与 tooltip 使用 pointer-events: none，只有面板接收事件。渲染模块以 three.js 的 Scene、Group、Material 为边界，不依赖应用框架。
 
 ## 模块职责
 
@@ -15,8 +15,12 @@
 | `scene/interaction.ts` | 物件材质副本、独立运动父组、平滑绽开与原色恢复 | `createObjectInteraction()` |
 | `scene/interactionPanel.ts` | 中文物件列表、三款样式、射线提示、保存状态与取消 | `createInteractionPanel()` |
 | `objects/catalog.ts` | 十类物件离线目录与 Group 元数据 | `DEFAULT_OBJECTS` / `nameObject()` |
-| `shared/interaction.ts` | 前后端交互类型、物件键及运行时校验 | 校验函数 |
-| `server/objects.repo.ts` | 单次读取并校验数据库物件目录 | `getObjects()` |
+| `shared/interaction.ts` | 前端交互类型、物件键及运行时校验；Java 侧有对应校验 | 校验函数 |
+| `backend` controller | `/api/health`、`/api/settings`、`/api/objects` 的状态码与 JSON | REST 控制器 |
+| `backend` service | 设置解析、interaction 校验、目录整理 | `SettingsService` 等 |
+| `backend` repository | MyBatis 参数化 SQL | `SceneSettingMapper` 等 |
+| `backend` entity / dto | 表行与返回给前端的驼峰结构 | 实体与响应 |
+| `backend` config | `.env`、必填变量、64 KB 请求上限 | 启动配置 |
 | `scene/controls.ts` | OrbitControls 鼠标、触屏、距离与角度约束 | 返回 controls |
 | `scene/lighting.ts` | 环境光、月光、店铺溢光、冷暖轮廓光 | 写入 Scene |
 | `scene/weather.ts` | GPU 雨丝、实例化积水涟漪 | `update(time)` |
@@ -26,17 +30,12 @@
 | `objects/props.ts` | 贩卖机、自行车、伞架、垃圾桶、灯杆、电线、街牌等 | 返回道具 Group |
 | `materials/palette.ts` | 四阶色阶、发光材质、程序化招牌与海报纹理 | 材质与纹理工厂 |
 | `materials/wetRoad.ts` | 单相机平面反射、积水噪声、霓虹路面色晕 | `update(time)` / `dispose()` |
-| `server/config.ts` | 从根目录 `.env` 读取配置，不输出连接信息 | `CONFIG` |
-| `server/db.ts` | 复用 MySQL 连接池和健康检查 | `pool` / `checkDatabase()` |
-| `server/settings.repo.ts` | 参数化查询与原子写入，一次读取全部设置 | `getAll()` / `getByKey()` / `setByKey()` |
-| `server/app.ts` | JSON 路由与隐藏敏感细节的错误响应 | `createApp()` |
-| `server/index.ts` | 回环地址监听、退出时释放连接池 | API 进程入口 |
 
 ## 初始化数据流
 
 ```text
 main.ts
-  ├─ loadSceneSettings() → /api/settings → settings.repo → MySQL
+  ├─ loadSceneSettings() → /api/settings、/api/objects → Service → Mapper → MySQL
   │    └─ 超时 / 失败 / 无效字段 → CONFIG 默认设置
   └─ createScene(settings)
        ├─ CONFIG → Scene / PerspectiveCamera / WebGLRenderer
@@ -58,11 +57,11 @@ main.ts
 
 ## 后端配置与设置更新
 
-`GET /api/health` 用 `SELECT 1` 检查连接，异常返回 503；设置接口提供全部读取、按键读取和 PUT 任意 JSON 值。不存在的键返回 404，无效 JSON 返回 400，非 JSON 写入返回 415，超出 64 KB 返回 413。写入采用单条参数化 upsert，并刷新 `updated_at`；不会改动已有表结构或初始化数据。
+`GET /api/health` 用 `SELECT 1` 检查连接，异常返回 503；设置接口提供全部读取、按键读取和 PUT 任意 JSON 值。不存在的键返回 404，无效 JSON 返回 400，非 JSON 写入返回 415，超出 64 KB 返回 413。写入采用单条参数化 upsert，并刷新 `updated_at`。应用启动不会改表或覆盖种子数据；中文注释由单独的 SQL 脚本按现有列类型写回。
 
 `camera.position`、`camera.target` 覆盖默认相机坐标，`reveal.enabled` 控制是否执行入场动画。前端逐字段校验，默认值保留在 `scene/config.ts`，热更新时取消未完成请求并释放场景。物件样式与绽开按钮立即更新本地预览；点击保存后写入全局 interaction 设置，刷新页面恢复。interaction 格式固定为 version: 1、exploded 布尔值、styles 中合法物件键对应 0/1/2。
 
-`.env` 仅供服务端读取，Vite 只用 `PORT` 配置开发和预览代理，不向前端注入 MySQL 变量。API 仅监听 `127.0.0.1`；生产部署通过同源反向代理转发 `/api`，开放写入前应在代理层设置访问控制。
+`.env` 仅供 Spring Boot 读取，Vite 只用 `PORT` 配置开发和预览代理，不向前端注入 MySQL 变量。本机 API 监听 `127.0.0.1`；容器把 `LISTEN_HOST` 设为 `0.0.0.0` 后，由同源反向代理转发 `/api`。开放写入前应在代理层设置访问控制。连接池最多 5 个连接。小内存主机使用 `-Xmx256m`，同一台机器还要跑构建或其他进程时使用 `-Xmx512m`。
 
 ## 路面反射
 

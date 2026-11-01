@@ -1,5 +1,7 @@
 # 交互功能实现任务（本地预览优先）
 
+> 历史任务。交互接口仍是原来的 JSON，实现已迁到 `backend/` 的 Spring Boot。
+
 请在当前仓库实现下列功能。完成后执行 npm run build 与 npm run check:api 确保通过。不要 git push，不要改 .env，不要部署服务器。
 
 ## 背景
