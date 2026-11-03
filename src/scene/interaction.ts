@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { isObjectKey } from '../../shared/interaction';
-import type { ObjectKey, StyleIndex } from '../../shared/interaction';
+import type { ObjectKey, StyleIndex, WeatherMode } from '../../shared/interaction';
+import type { Weather } from './weather';
 import type { SceneSettings } from './settings';
 
 type ColorMaterial = THREE.MeshToonMaterial | THREE.MeshStandardMaterial | THREE.MeshBasicMaterial;
@@ -10,8 +11,8 @@ export interface ObjectInteraction {
   pickTargets: THREE.Mesh[];
   setStyle: (key: ObjectKey, style: StyleIndex) => void;
   setExploded: (exploded: boolean) => void;
-  /** 设置雨水偏好，并与绽开状态共同决定雨效可见性。 */
-  setRainEnabled: (enabled: boolean) => void;
+  /** 设置天气偏好，并与绽开状态共同决定效果可见性。 */
+  setWeatherMode: (mode: WeatherMode) => void;
   update: (delta: number) => boolean;
   dispose: () => void;
 }
@@ -67,7 +68,7 @@ const STYLES: Record<ObjectKey, readonly [{ color: string; glow: string }, { col
 };
 
 /** 隔离物件材质及绽开父组，并统一协调天气、路面湿度与绽开状态。 */
-export function createObjectInteraction(scene: THREE.Scene, settings: SceneSettings, weather?: { setVisible: (visible: boolean) => void }, road?: { setWetness: (wet: boolean) => void }): ObjectInteraction {
+export function createObjectInteraction(scene: THREE.Scene, settings: SceneSettings, weather?: Pick<Weather, 'setMode' | 'setVisible'>, road?: { setWetness: (wet: boolean) => void }): ObjectInteraction {
   const objects = new Map<ObjectKey, THREE.Group>();
   scene.traverse((object) => {
     // 仅登记物件根组（name 与 key 一致），忽略便利店内部带 storePart 的子组。
@@ -172,26 +173,28 @@ export function createObjectInteraction(scene: THREE.Scene, settings: SceneSetti
     settings.interaction.styles[key] = style;
   }
 
-  /** 根据雨水偏好与绽开状态同步雨丝、涟漪及路面湿度。 */
+  /** 根据天气及绽开状态同步降雨、风效、闪电和路面湿度。 */
   function syncWeather(): void {
-    const wet = settings.interaction.rainEnabled && !settings.interaction.exploded;
-    weather?.setVisible(wet);
-    road?.setWetness(wet);
+    const { weatherMode, exploded } = settings.interaction;
+    weather?.setMode(weatherMode);
+    weather?.setVisible(!exploded);
+    road?.setWetness((weatherMode === 'rain' || weatherMode === 'thunderstorm') && !exploded);
   }
 
-  /** 更新雨水偏好，绽开期间仍隐藏雨效。 */
-  function setRainEnabled(enabled: boolean): void {
-    settings.interaction.rainEnabled = enabled;
+  /** 更新四模式偏好，同时保留旧客户端兼容的雨水字段。 */
+  function setWeatherMode(mode: WeatherMode): void {
+    settings.interaction.weatherMode = mode;
+    settings.interaction.rainEnabled = mode === 'rain' || mode === 'thunderstorm';
     syncWeather();
   }
 
-  /** 切换绽开目标；还原后按用户雨水偏好恢复雨效。 */
+  /** 切换绽开目标；还原后按用户天气偏好恢复效果。 */
   function setExploded(exploded: boolean): void {
     settings.interaction.exploded = exploded;
     target = exploded ? 1 : 0;
     syncWeather();
   }
-  // 启动时同步已保存的雨水偏好与绽开状态。
+  // 启动时同步已保存的天气偏好与绽开状态。
   syncWeather();
 
   /** 分阶段推进分解图：先整体拉开，再按 delay 错峰到位，形成技术爆炸图间隙。 */
@@ -227,7 +230,7 @@ export function createObjectInteraction(scene: THREE.Scene, settings: SceneSetti
     if (object.parent?.userData.storeDoor || materials.some((material) => !material.transparent)) pickTargets.push(object);
   });
   return {
-    objects, pickTargets, setStyle, setExploded, setRainEnabled, update,
+    objects, pickTargets, setStyle, setExploded, setWeatherMode, update,
     /** 恢复原材质后释放交互副本，原资源仍由场景统一清理。 */
     dispose(): void {
       restore.forEach((reset) => reset());

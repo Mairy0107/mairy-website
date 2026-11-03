@@ -30,7 +30,7 @@ export function createScene(settings: SceneSettings): () => void {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.domElement.setAttribute('aria-label', '可拖拽旋转、滚轮缩放的雨夜便利店三维微缩景观');
+  renderer.domElement.setAttribute('aria-label', '可拖拽旋转、滚轮缩放、可切换天气的便利店三维微缩景观');
   document.body.append(renderer.domElement);
   const controls = createControls(camera, renderer.domElement);
   // 复用原控制器，仅应用经过校验的远端观察目标。
@@ -52,7 +52,7 @@ export function createScene(settings: SceneSettings): () => void {
   // 先保留入场目标，再添加独立运动父组，避免两套动画覆盖同一位置。
   const propTargets = [...props.children];
   const ac = scene.getObjectByName('ac')!;
-  // 雨水开关和绽开状态统一控制天气与路面湿度。
+  // 四模式天气和绽开状态统一控制效果与路面湿度。
   const interaction = createObjectInteraction(scene, settings, weather, road);
   const reveal = createReveal(scene, [
     { object: base, delay: 0, rise: 0, scale: 1, duration: 1 },
@@ -108,11 +108,12 @@ export function createScene(settings: SceneSettings): () => void {
     time += delta;
     controls.update();
     road.update(time);
-    weather.update(time);
     // 入场期间持续更新变换与遮罩阴影，结束时补绘最终静态阴影。
     const moving = interaction.update(delta);
     const doorMoving = door.update(delta);
     if (reveal.update(time) || moving || doorMoving) renderer.shadowMap.needsUpdate = true;
+    // 入场先更新光源，天气随后控制闪电，避免被临时入场状态覆盖。
+    weather.update(time);
     composer.render();
     // 渲染已刷新世界矩阵，名称提示跟随当前镜头与物件位置。
     panel.update();

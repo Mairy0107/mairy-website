@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { CONFIG } from './config';
+import type { WeatherMode } from '../../shared/interaction';
 
 export interface Weather {
   update: (time: number) => void;
-  /** 绽开分解图时关闭雨丝与涟漪，还原后恢复。 */
+  /** 在原有雨效中切换晴、雨、雷雨和风。 */
+  setMode: (mode: WeatherMode) => void;
+  /** 绽开分解图时暂停全部天气效果，还原后恢复。 */
   setVisible: (visible: boolean) => void;
 }
 
-/** 用 GPU 位移绘制细雨，以实例化圆环表现道路上的落雨涟漪。 */
+/** 复用 GPU 细雨和实例化涟漪，补充无阴影闪电与 GPU 飘叶。 */
 export function createWeather(scene: THREE.Object3D): Weather {
   const positions = new Float32Array(CONFIG.rainCount * 6);
   const seeds = new Float32Array(CONFIG.rainCount * 2);
@@ -72,9 +75,87 @@ export function createWeather(scene: THREE.Object3D): Weather {
   const rippleColor = new THREE.Color('#8eb7c6');
   const fadedColor = new THREE.Color();
   scene.add(ripples);
+
+  // 飘叶只占一次绘制调用，顶点位移与翻转全部在 GPU 上完成。
+  const leaf = new THREE.Shape();
+  leaf.moveTo(-0.14, 0); leaf.lineTo(0, 0.065);
+  leaf.lineTo(0.14, 0); leaf.lineTo(0, -0.065); leaf.closePath();
+  const leafMaterial = new THREE.MeshBasicMaterial({ color: '#ccbc76', side: THREE.DoubleSide });
+  const windTime = { value: 0 };
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const windSpeed = { value: reducedMotion ? 0.45 : 3.2 };
+  /** 共享时间 uniform，让入场材质副本与原材质保持同一风向和节奏。 */
+  leafMaterial.onBeforeCompile = (shader): void => {
+    shader.uniforms.uWindTime = windTime;
+    shader.uniforms.uWindSpeed = windSpeed;
+    shader.vertexShader = 'uniform float uWindTime;\nuniform float uWindSpeed;\n' + shader.vertexShader.replace('#include <begin_vertex>', `
+      #include <begin_vertex>
+      #ifdef USE_INSTANCING
+        float seed = instanceMatrix[3].z * 2.7 + instanceMatrix[3].y;
+        float phase = uWindTime * uWindSpeed + seed;
+        float angle = phase * 1.8;
+        transformed.xy = mat2(cos(angle), -sin(angle), sin(angle), cos(angle)) * transformed.xy;
+        transformed.z += transformed.y * sin(phase * 0.7);
+        transformed.x += mod(instanceMatrix[3].x + uWindTime * uWindSpeed + 8.0, 16.0) - 8.0 - instanceMatrix[3].x;
+        transformed.y += sin(phase) * 0.25;
+      #endif
+    `);
+  };
+  /** 固定风效程序缓存键，入场副本沿用同一顶点逻辑。 */
+  leafMaterial.customProgramCacheKey = () => 'weather-wind-v1';
+  const leaves = new THREE.InstancedMesh(new THREE.ShapeGeometry(leaf), leafMaterial, 72);
+  const leafTransform = new THREE.Object3D();
+  for (let index = 0; index < leaves.count; index++) {
+    // 只在店前道路上吹动，避免叶片穿入屋顶与货架。
+    leafTransform.position.set(Math.random() * 16 - 8, 0.45 + Math.random() * 2, 3.4 + Math.random() * 3.8);
+    leafTransform.updateMatrix();
+    leaves.setMatrixAt(index, leafTransform.matrix);
+  }
+  leaves.frustumCulled = false;
+  /** 飘叶仅作装饰，不拦截门扇与物件的射线点击。 */
+  leaves.raycast = (): void => {};
+  scene.add(leaves);
+
+  // 闪电沿用场景光照，不新增阴影贴图、后处理或逐帧几何。
+  const lightning = new THREE.DirectionalLight('#c6ddff', 0);
+  lightning.position.set(-3, 10, 4);
+  scene.add(lightning);
+  let mode: WeatherMode = 'rain';
+  let enabled = true;
+  let lastTime: number | undefined;
+  let stormTime = 0;
+  let nextFlash = 6 + Math.random() * 5;
+  let flashAge = 1;
+
+  /** 切换或隐藏时同步子效果，立即清除残留闪光。 */
+  function syncVisibility(): void {
+    const wet = mode === 'rain' || mode === 'thunderstorm';
+    rain.visible = ripples.visible = enabled && wet;
+    leaves.visible = enabled && mode === 'windy';
+    lightning.visible = enabled && mode === 'thunderstorm' && !reducedMotion;
+    lightning.intensity = 0;
+    stormTime = 0;
+    nextFlash = 6 + Math.random() * 5;
+    flashAge = 1;
+  }
+  syncVisibility();
   return {
-    /** 仅更新雨丝时间和涟漪实例矩阵，不创建逐帧几何。 */
+    /** 仅更新 uniform、涟漪矩阵及低频闪光，不创建逐帧几何。 */
     update(time: number): void {
+      const delta = lastTime === undefined ? 0 : THREE.MathUtils.clamp(time - lastTime, 0, 0.05);
+      lastTime = time;
+      if (!enabled || !scene.visible) return;
+      if (leaves.visible) windTime.value = time;
+      if (lightning.visible) {
+        stormTime += delta;
+        flashAge += delta;
+        if (stormTime >= nextFlash) {
+          flashAge = 0;
+          nextFlash = stormTime + 6 + Math.random() * 5;
+        }
+        // 单次柔和衰减，每次间隔至少六秒，避免连续频闪。
+        lightning.intensity = flashAge < 0.6 ? 2.8 * Math.exp(-flashAge * 10) : 0;
+      }
       if (!rain.visible) return;
       material.uniforms.uTime.value = time;
       drops.forEach((drop, index) => {
@@ -89,9 +170,17 @@ export function createWeather(scene: THREE.Object3D): Weather {
       ripples.instanceMatrix.needsUpdate = true;
       if (ripples.instanceColor) ripples.instanceColor.needsUpdate = true;
     },
+    /** 选择天气时重置闪电计时，重复设置不打断已有动画。 */
+    setMode(nextMode: WeatherMode): void {
+      if (mode === nextMode) return;
+      mode = nextMode;
+      syncVisibility();
+    },
+    /** 绽开时暂停天气，还原后继续显示所选模式。 */
     setVisible(visible: boolean): void {
-      rain.visible = visible;
-      ripples.visible = visible;
+      if (enabled === visible) return;
+      enabled = visible;
+      syncVisibility();
     },
   };
 }

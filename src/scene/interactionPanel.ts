@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ObjectKey, StyleIndex } from '../../shared/interaction';
-import { isObjectKey } from '../../shared/interaction';
+import { isObjectKey, isWeatherMode } from '../../shared/interaction';
 import { saveInteraction } from './settings';
 import type { SceneSettings } from './settings';
 import type { ObjectInteraction } from './interaction';
@@ -11,7 +11,7 @@ export interface InteractionPanel {
   dispose: () => void;
 }
 
-/** 创建优先展示绽开与雨水开关的场景面板及名称提示，空白区域透传画布事件。 */
+/** 创建优先展示绽开与四模式天气选择的场景面板及名称提示，空白区域透传画布事件。 */
 export function createInteractionPanel(
   camera: THREE.Camera,
   canvas: HTMLCanvasElement,
@@ -33,7 +33,15 @@ export function createInteractionPanel(
     <h1>Mairy</h1>
     <!-- 优先展示场景开关，避免操作说明挤占首屏入口。 -->
     <button type="button" class="explode-toggle" aria-pressed="false">绽开模型</button>
-    <button type="button" class="rain-toggle" aria-pressed="true">雨水：开</button>
+    <!-- 使用原生选择框，键盘与触屏均可直接选择四种天气。 -->
+    <label class="weather-control">天气
+      <select class="weather-select" aria-label="天气模式">
+        <option value="clear">晴</option>
+        <option value="rain">雨</option>
+        <option value="thunderstorm">雷雨</option>
+        <option value="windy">风</option>
+      </select>
+    </label>
     <p class="interaction-hint">拖拽旋转 · 滚轮缩放<br>绽开后悬停查看名称，点选物件切换样式</p>
     <h2>选择物件</h2>
     <div class="object-list" role="group" aria-label="可交互物件"></div>
@@ -53,7 +61,7 @@ export function createInteractionPanel(
   const styles = panel.querySelector<HTMLDivElement>('.style-list')!;
   const heading = panel.querySelector<HTMLHeadingElement>('.style-heading')!;
   const explode = panel.querySelector<HTMLButtonElement>('.explode-toggle')!;
-  const rain = panel.querySelector<HTMLButtonElement>('.rain-toggle')!;
+  const weather = panel.querySelector<HTMLSelectElement>('.weather-select')!;
   const save = panel.querySelector<HTMLButtonElement>('.save-interaction')!;
   const status = panel.querySelector<HTMLParagraphElement>('.interaction-status')!;
   const objectButtons = new Map<ObjectKey, HTMLButtonElement>();
@@ -121,21 +129,21 @@ export function createInteractionPanel(
     changed();
   }
 
-  /** 同步雨水偏好文案与可访问状态，绽开不改变用户偏好。 */
-  function syncRain(): void {
-    rain.textContent = settings.interaction.rainEnabled ? '雨水：开' : '雨水：关';
-    rain.setAttribute('aria-pressed', String(settings.interaction.rainEnabled));
+  /** 同步天气选择；绽开只暂停效果，不更改用户所选模式。 */
+  function syncWeather(): void {
+    weather.value = settings.interaction.weatherMode;
   }
 
-  /** 切换实际雨效，并复用整体设置的待保存提示。 */
-  function toggleRain(): void {
+  /** 结束入场后应用天气，并复用整体设置的待保存提示。 */
+  function changeWeather(): void {
+    if (!isWeatherMode(weather.value) || weather.value === settings.interaction.weatherMode) return;
     beforeChange();
-    model.setRainEnabled(!settings.interaction.rainEnabled);
-    syncRain();
+    model.setWeatherMode(weather.value);
+    syncWeather();
     changed();
   }
 
-  /** 保存含雨水偏好的整体快照，超时或错误保留本地调整以便重试。 */
+  /** 保存含天气偏好的整体快照，超时或错误保留本地调整以便重试。 */
   async function persist(): Promise<void> {
     if (saving) return;
     saving = new AbortController();
@@ -267,7 +275,7 @@ export function createInteractionPanel(
   }
 
   explode.addEventListener('click', toggleExploded, events);
-  rain.addEventListener('click', toggleRain, events);
+  weather.addEventListener('change', changeWeather, events);
   save.addEventListener('click', () => { void persist(); }, events);
   canvas.addEventListener('pointermove', move, events);
   canvas.addEventListener('pointerdown', pointerDown, events);
@@ -278,7 +286,7 @@ export function createInteractionPanel(
   panel.addEventListener('pointerenter', leave, events);
   select(selected);
   syncExploded();
-  syncRain();
+  syncWeather();
   return {
     update,
     /** 卸载所有面板事件、未完成保存请求与提示节点。 */

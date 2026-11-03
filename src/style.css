@@ -32,10 +32,12 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; outline:
 .interaction-panel button[aria-pressed="true"] { color: #c6f9e7; border-color: #75bda5; background: rgb(73 156 131 / 24%); }
 .object-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .style-list { display: grid; gap: 7px; }
-/* 场景开关独占整行；雨水入口增加间距和字重，选中态沿用 aria-pressed。 */
-.explode-toggle, .rain-toggle, .save-interaction { width: 100%; }
-.explode-toggle, .rain-toggle { display: block; }
-.rain-toggle { margin: 12px 0 16px; font-weight: 600; }
+/* 天气沿用场景面板布局，原生选择框保持清晰的中文入口。 */
+.explode-toggle, .save-interaction { width: 100%; }
+.explode-toggle { display: block; }
+.weather-control { display: flex; align-items: center; gap: 12px; margin: 12px 0 16px; font-weight: 600; }
+.weather-select { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid #75bda5; border-radius: 8px; color: #c6f9e7; background: #203b3b; font: inherit; cursor: pointer; }
+.weather-select:focus-visible { outline: 2px solid #a6efda; outline-offset: 3px; }
 .interaction-panel .save-interaction { margin-top: 20px; background: #275c52; border-color: #619e8d; color: #e1fff3; }
 .interaction-panel button:disabled { opacity: 0.55; cursor: wait; }
 .interaction-status { min-height: 36px; margin: 12px 0 0; color: #b0c7cb; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }

@@ -23,12 +23,12 @@ function isVector3(value: unknown): value is Vector3 {
   return Array.isArray(value) && value.length === 3 && value.every((item) => typeof item === 'number' && Number.isFinite(item));
 }
 
-/** 并行读取设置与目录，兼容旧雨水设置，失败或超时后仍可本地预览。 */
+/** 并行读取设置与目录，兼容旧雨水偏好和四模式天气，失败或超时后仍可本地预览。 */
 export async function loadSceneSettings(signal: AbortSignal): Promise<SceneSettings> {
   const settings: SceneSettings = {
     camera: { position: CONFIG.camera.position, target: CONFIG.camera.target },
     reveal: { enabled: CONFIG.reveal.enabled },
-    interaction: { exploded: false, rainEnabled: true, styles: {}, version: 1 },
+    interaction: { exploded: false, rainEnabled: true, weatherMode: 'rain', styles: {}, version: 1 },
     objects: DEFAULT_OBJECTS.map((object) => ({ ...object, styleLabels: [...object.styleLabels] })),
     interactionNotice: '',
   };
@@ -56,8 +56,14 @@ export async function loadSceneSettings(signal: AbortSignal): Promise<SceneSetti
       }
       if (isObject(data.reveal) && typeof data.reveal.enabled === 'boolean') settings.reveal.enabled = data.reveal.enabled;
       if (isInteractionSettings(data.interaction)) {
-        // 旧服务或旧库缺少雨水偏好时，保持默认下雨的首屏。
-        settings.interaction = { ...data.interaction, rainEnabled: data.interaction.rainEnabled ?? true, styles: { ...data.interaction.styles } };
+        // 旧数据按雨水开关映射晴雨；四模式字段优先，继续兼容旧客户端。
+        const weatherMode = data.interaction.weatherMode ?? (data.interaction.rainEnabled === false ? 'clear' : 'rain');
+        settings.interaction = {
+          ...data.interaction,
+          weatherMode,
+          rainEnabled: weatherMode === 'rain' || weatherMode === 'thunderstorm',
+          styles: { ...data.interaction.styles },
+        };
       } else if (data.interaction !== undefined) {
         settings.interactionNotice = '服务器交互设置无效，已使用本地默认值。';
       }

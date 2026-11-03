@@ -28,6 +28,8 @@ import com.mairy.konbini.service.impl.SceneObjectServiceImpl;
 import com.mairy.konbini.service.impl.SettingsServiceImpl;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -153,6 +155,44 @@ class ApiContractTest {
                 .andExpect(jsonPath("$.rainEnabled").value(false));
     }
 
+    /** 四模式沿用原设置接口保存并读取，保持绽开和样式字段不变。 */
+    @ParameterizedTest
+    @ValueSource(strings = { "clear", "rain", "thunderstorm", "windy" })
+    void savesAndReadsWeatherModes(String mode) throws Exception {
+        boolean wet = "rain".equals(mode) || "thunderstorm".equals(mode);
+        String body = "{\"exploded\":true,\"styles\":{\"store\":1},\"version\":1,\"weatherMode\":\""
+                + mode + "\",\"rainEnabled\":" + wet + "}";
+        mockMvc.perform(put("/api/settings/interaction")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.weatherMode").value(mode))
+                .andExpect(jsonPath("$.rainEnabled").value(wet))
+                .andExpect(jsonPath("$.exploded").value(true))
+                .andExpect(jsonPath("$.styles.store").value(1));
+        ArgumentCaptor<String> stored = ArgumentCaptor.forClass(String.class);
+        verify(settingMapper).upsert(eq("interaction"), stored.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(objectMapper.readTree(body), objectMapper.readTree(stored.getValue()));
+
+        SceneSetting interaction = new SceneSetting();
+        interaction.setSettingKey("interaction");
+        interaction.setSettingValue(stored.getValue());
+        when(settingMapper.findAll()).thenReturn(List.of(interaction));
+        mockMvc.perform(get("/api/settings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.interaction.weatherMode").value(mode));
+    }
+
+    /** 无效天气必须在写入前拒绝，避免保存后前端无法加载整个交互设置。 */
+    @ParameterizedTest
+    @ValueSource(strings = { "null", "0", "true", "\"snow\"", "\"RAIN\"", "\"\"" })
+    void rejectsInvalidWeatherModes(String value) throws Exception {
+        mockMvc.perform(put("/api/settings/interaction")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exploded\":false,\"styles\":{},\"version\":1,\"weatherMode\":" + value + "}"))
+                .andExpect(status().isBadRequest());
+        verify(settingMapper, never()).upsert(anyString(), anyString());
+    }
+
     /** 无效雨水字段必须在写入数据库之前被拒绝。 */
     @Test
     void rejectsInvalidRainPreference() throws Exception {
@@ -171,7 +211,7 @@ class ApiContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"exploded\":false,\"styles\":{\"store\":3},\"version\":1}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("交互设置格式无效，请使用 version: 1、exploded 布尔值、可选 rainEnabled 布尔值及 0/1/2 样式"));
+                .andExpect(jsonPath("$.error").value("交互设置格式无效，请使用 version: 1、exploded 布尔值、可选 rainEnabled 布尔值、可选 weatherMode（clear/rain/thunderstorm/windy）及 0/1/2 样式"));
         verify(settingMapper, never()).upsert(anyString(), anyString());
 
         mockMvc.perform(put("/api/settings/camera").content("{\"position\":[1,2,3]}"))

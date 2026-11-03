@@ -17,12 +17,14 @@ public final class InteractionValidator {
             "store", "vending", "bike", "umbrella", "bins", "lamp", "notice", "poles", "guardrail", "ac");
 
     private static final Set<String> OBJECT_KEY_SET = Set.copyOf(OBJECT_KEYS);
+    /** 与前端四种天气保持一致，旧数据允许不含此字段。 */
+    private static final Set<String> WEATHER_MODES = Set.of("clear", "rain", "thunderstorm", "windy");
 
     private InteractionValidator() {
     }
 
     /**
-     * 校验交互设置：雨水偏好允许缺省，否则必须为布尔；样式仅限已知物件的 0、1 或 2。
+     * 校验交互设置：天气与旧雨水字段允许缺省；样式仅限已知物件的 0、1 或 2。
      */
     public static boolean isInteractionSettings(JsonNode value) {
         if (value == null || !value.isObject()) {
@@ -36,6 +38,10 @@ public final class InteractionValidator {
         }
         JsonNode rainEnabled = value.get("rainEnabled");
         if (rainEnabled != null && !rainEnabled.isBoolean()) {
+            return false;
+        }
+        JsonNode weatherMode = value.get("weatherMode");
+        if (weatherMode != null && (!weatherMode.isTextual() || !WEATHER_MODES.contains(weatherMode.textValue()))) {
             return false;
         }
         if (!(styles instanceof ObjectNode stylesObject)) {
