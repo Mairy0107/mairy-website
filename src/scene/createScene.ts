@@ -11,6 +11,7 @@ import { createControls } from './controls';
 import { createLighting } from './lighting';
 import { createWeather } from './weather';
 import { createReveal } from './reveal';
+import { createStoreDoor } from './storeDoor';
 import { createObjectInteraction } from './interaction';
 import { createInteractionPanel } from './interactionPanel';
 import { CONFIG } from './config';
@@ -69,7 +70,9 @@ export function createScene(settings: SceneSettings): () => void {
     reveal.dispose();
     renderer.shadowMap.needsUpdate = true;
   }
-  const panel = createInteractionPanel(camera, renderer.domElement, interaction, settings, finishReveal);
+  // 使用当前站点的 /chat/，开门完整显示后再进入聊天室。
+  const door = createStoreDoor(store, () => window.location.assign('/chat/'), window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const panel = createInteractionPanel(camera, renderer.domElement, interaction, settings, finishReveal, door);
 
   // 后处理目标也开启多重采样，保证几何边缘在辉光处理后仍然平滑。
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -108,7 +111,8 @@ export function createScene(settings: SceneSettings): () => void {
     weather.update(time);
     // 入场期间持续更新变换与遮罩阴影，结束时补绘最终静态阴影。
     const moving = interaction.update(delta);
-    if (reveal.update(time) || moving) renderer.shadowMap.needsUpdate = true;
+    const doorMoving = door.update(delta);
+    if (reveal.update(time) || moving || doorMoving) renderer.shadowMap.needsUpdate = true;
     composer.render();
     // 渲染已刷新世界矩阵，名称提示跟随当前镜头与物件位置。
     panel.update();

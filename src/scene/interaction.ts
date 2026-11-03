@@ -223,7 +223,8 @@ export function createObjectInteraction(scene: THREE.Scene, settings: SceneSetti
     // InstancedMesh 商品也参与拾取，便于悬停显示货架名称。
     if (object instanceof THREE.InstancedMesh) { pickTargets.push(object); return; }
     const materials = Array.isArray(object.material) ? object.material : [object.material];
-    if (materials.some((material) => !material.transparent)) pickTargets.push(object);
+    // 门扇玻璃本体也可点击，固定橱窗不扩展为进门区域。
+    if (object.parent?.userData.storeDoor || materials.some((material) => !material.transparent)) pickTargets.push(object);
   });
   return {
     objects, pickTargets, setStyle, setExploded, setRainEnabled, update,

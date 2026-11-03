@@ -4,6 +4,7 @@ import { isObjectKey } from '../../shared/interaction';
 import { saveInteraction } from './settings';
 import type { SceneSettings } from './settings';
 import type { ObjectInteraction } from './interaction';
+import type { StoreDoor } from './storeDoor';
 
 export interface InteractionPanel {
   update: () => void;
@@ -17,6 +18,7 @@ export function createInteractionPanel(
   model: ObjectInteraction,
   settings: SceneSettings,
   beforeChange: () => void,
+  door: StoreDoor,
 ): InteractionPanel {
   const controller = new AbortController();
   const events = { signal: controller.signal };
@@ -164,6 +166,9 @@ export function createInteractionPanel(
   const candidates = model.pickTargets;
   let pointerInside = false;
   let dragging = false;
+  // 记录同一次单指点按，避免拖拽、多指缩放或取消后误进门。
+  let clickPointer: number | undefined;
+  let pressedDoor = false;
   let clientX = 0;
   let clientY = 0;
 
@@ -173,7 +178,7 @@ export function createInteractionPanel(
     return true;
   }
 
-  /** 对子网格射线检测：优先命中店内部件，再回退到完整物件 Group。 */
+  /** 沿首个可见命中网格向上识别门扇、店内部件及完整物件，保留遮挡关系。 */
   function pick(): THREE.Group | undefined {
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
@@ -182,6 +187,7 @@ export function createInteractionPanel(
     const hit = raycaster.intersectObjects(candidates, false).find((entry) => entry.object instanceof THREE.Mesh && visible(entry.object));
     let objectHit: THREE.Group | undefined;
     for (let object = hit?.object; object; object = object.parent ?? undefined) {
+      if (object instanceof THREE.Group && object.userData.storeDoor) return object;
       if (object instanceof THREE.Group && (typeof object.userData.storePart === 'string' || typeof object.userData.explodePart === 'string')) return object;
       if (object instanceof THREE.Group && isObjectKey(object.userData.objectKey)) objectHit ??= object;
     }
@@ -196,51 +202,66 @@ export function createInteractionPanel(
       && !(x >= panelRect.left && x <= panelRect.right && y >= panelRect.top && y <= panelRect.bottom);
   }
 
-  /** 仅在绽开模式下显示悬停名称；未绽开时绝不出现文字提示。 */
+  /** 门扇始终提示点击进门，其余物件继续仅在绽开模式显示名称。 */
   function update(): void {
-    if (!settings.interaction.exploded || !pointerInside || dragging || !overCanvas(clientX, clientY)) {
+    if (!pointerInside || dragging || !overCanvas(clientX, clientY)) {
       tooltip.hidden = true;
       return;
     }
     const object = pick();
-    tooltip.hidden = !object;
-    if (!object) return;
-    tooltip.textContent = object.userData.displayName;
+    tooltip.hidden = !object || (!settings.interaction.exploded && !object.userData.storeDoor);
+    if (!object || tooltip.hidden) return;
+    tooltip.textContent = object.userData.storeDoor ? '点击进门' : object.userData.displayName;
     tooltip.style.left = Math.max(8, Math.min(clientX + 14, window.innerWidth - tooltip.offsetWidth - 8)) + 'px';
     tooltip.style.top = Math.max(8, Math.min(clientY + 14, window.innerHeight - tooltip.offsetHeight - 8)) + 'px';
   }
 
-  /** 记录鼠标位置，拖拽与触屏期间隐藏悬停名称。 */
+  /** 记录指针位置，移动超过点击阈值后取消点按，拖拽与触屏期间隐藏提示。 */
   function move(event: PointerEvent): void {
     clientX = event.clientX;
     clientY = event.clientY;
     pointerInside = event.pointerType !== 'touch';
     dragging = event.buttons !== 0;
+    if (clickPointer === event.pointerId && down.distanceTo(new THREE.Vector2(clientX, clientY)) > 4) clickPointer = undefined;
   }
 
-  /** 保存按下位置，供抬起时区分点选与相机拖拽。 */
+  /** 保存主指针按下位置与门扇命中状态，第二个触点使本次点按失效。 */
   function pointerDown(event: PointerEvent): void {
     down.set(event.clientX, event.clientY);
+    clientX = event.clientX;
+    clientY = event.clientY;
+    clickPointer = event.isPrimary && event.button === 0 ? event.pointerId : undefined;
+    pressedDoor = !!pick()?.userData.storeDoor;
     dragging = true;
     tooltip.hidden = true;
   }
 
-  /** 短距离左键点选模型，在右侧展示其三款样式。 */
+  /** 门扇单击或轻触后先结束入场再开门，其余模型保留原有样式选择。 */
   function pointerUp(event: PointerEvent): void {
+    const clicked = clickPointer === event.pointerId;
+    clickPointer = undefined;
     dragging = false;
     clientX = event.clientX;
     clientY = event.clientY;
     pointerInside = event.pointerType !== 'touch' && overCanvas(clientX, clientY);
-    if (!overCanvas(clientX, clientY) || event.button !== 0 || down.distanceTo(new THREE.Vector2(clientX, clientY)) > 4) return;
+    if (!clicked || !overCanvas(clientX, clientY) || event.button !== 0 || down.distanceTo(new THREE.Vector2(clientX, clientY)) > 4) return;
     const object = pick();
     if (!object) return;
+    if (object.userData.storeDoor) {
+      if (!pressedDoor) return;
+      beforeChange();
+      door.open();
+      tooltip.hidden = true;
+      return;
+    }
     if (typeof object.userData.explodePart === 'string') return; // 附加部件仅展示名称，不切换样式目录
     const key = typeof object.userData.storePart === 'string' ? 'store' : object.userData.objectKey;
     if (isObjectKey(key)) select(key);
   }
 
-  /** 离开画布或取消触点时移除提示，不干扰 OrbitControls。 */
+  /** 离开画布、取消触点或窗口失焦时取消点按并移除提示，不干扰相机控制。 */
   function leave(): void {
+    clickPointer = undefined;
     pointerInside = false;
     tooltip.hidden = true;
   }

@@ -81,21 +81,34 @@ export function createStore(scene: THREE.Scene): THREE.Group {
   const facade = group(root, [0, 0, 0]);
   nameStorePart(facade, 'store-glass', '玻璃与自动门');
   const glass = new THREE.MeshPhysicalMaterial({ color: '#b3e8df', transparent: true, opacity: 0.18, roughness: 0.12, metalness: 0.15, depthWrite: false, side: THREE.DoubleSide });
-  for (const [x, width] of [[-2.54, 2.12], [2.54, 2.12], [-0.58, 1.12], [0.58, 1.12]] as const) {
-    box(facade, [width, 2.38, 0.025], [x, 1.51, 1.96], glass);
-    box(facade, [width, 0.07, 0.09], [x, 0.34, 1.99], CONFIG.colors.trim);
-    box(facade, [width, 0.065, 0.075], [x, 1.69 + 1.0, 1.99], CONFIG.colors.trim);
-    box(facade, [width, 0.13, 0.03], [x, 1.08, 1.995], '#6cb99f');
+  // 两侧固定玻璃保留在立面，中间 x = ±0.58 的门扇单独成组滑动。
+  for (const x of [-2.54, 2.54]) {
+    box(facade, [2.12, 2.38, 0.025], [x, 1.51, 1.96], glass);
+    box(facade, [2.12, 0.07, 0.09], [x, 0.34, 1.99], CONFIG.colors.trim);
+    box(facade, [2.12, 0.065, 0.075], [x, 2.69, 1.99], CONFIG.colors.trim);
+    box(facade, [2.12, 0.13, 0.03], [x, 1.08, 1.995], '#6cb99f');
   }
-  for (const x of [-3.65, -1.34, 0, 1.34, 3.65]) box(facade, [0.065, 2.48, 0.11], [x, 1.51, 2.01], CONFIG.colors.trim);
-  for (const x of [-0.12, 0.12]) box(facade, [0.035, 0.38, 0.08], [x, 1.4, 2.075], '#d4e4dc');
-  box(facade, [2.65, 0.17, 0.18], [0, 2.83, 2.02], CONFIG.colors.trim);
-  box(facade, [0.19, 0.07, 0.05], [0, 2.8, 2.13], glow('#7ce5cc', 0.5));
+  for (const x of [-3.65, -1.34, 1.34, 3.65]) box(facade, [0.065, 2.48, 0.11], [x, 1.51, 2.01], CONFIG.colors.trim);
   const label = canvasTexture(256, 64, (ctx) => {
     ctx.fillStyle = '#edf2dd'; ctx.fillRect(0, 0, 256, 64);
     ctx.fillStyle = '#408675'; ctx.font = 'bold 26px "Yu Gothic", sans-serif'; ctx.fillText('自動ドア', 22, 43);
   });
-  box(facade, [0.72, 0.18, 0.012], [0, 1.9, 2.04], new THREE.MeshBasicMaterial({ map: label }));
+  for (const direction of [-1, 1]) {
+    // 门扇略前于固定玻璃，打开重叠时避免闪烁；仍随 store-glass 一起绽开。
+    const door = group(facade, [direction * 0.58, 0, 0.08]);
+    door.name = direction < 0 ? 'store-door-left' : 'store-door-right';
+    door.userData.storeDoor = true;
+    box(door, [1.12, 2.38, 0.025], [0, 1.51, 1.96], glass);
+    box(door, [1.12, 0.07, 0.09], [0, 0.34, 1.99], CONFIG.colors.trim);
+    box(door, [1.12, 0.065, 0.075], [0, 2.69, 1.99], CONFIG.colors.trim);
+    box(door, [1.12, 0.13, 0.03], [0, 1.08, 1.995], '#6cb99f');
+    for (const x of [-0.56, 0.56]) box(door, [0.0325, 2.38, 0.11], [x, 1.51, 2.01], CONFIG.colors.trim);
+    box(door, [0.035, 0.38, 0.08], [-direction * 0.46, 1.4, 2.075], '#d4e4dc');
+    // 标识完整附着于左门，防止打开后仍悬在入口中央。
+    if (direction < 0) box(door, [0.72, 0.18, 0.012], [0, 1.9, 2.04], new THREE.MeshBasicMaterial({ map: label }));
+  }
+  box(facade, [2.65, 0.17, 0.18], [0, 2.83, 2.02], CONFIG.colors.trim);
+  box(facade, [0.19, 0.07, 0.05], [0, 2.8, 2.13], glow('#7ce5cc', 0.5));
   const shine = new THREE.MeshBasicMaterial({ color: '#e3fff1', transparent: true, opacity: 0.14, depthWrite: false });
   for (const x of [-2.9, 2.2]) {
     const streak = box(facade, [0.07, 1.65, 0.008], [x, 1.58, 2.033], shine);
